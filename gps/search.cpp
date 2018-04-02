@@ -37,12 +37,9 @@
 #include "gps.h"
 #include "spi.h"
 #include "cacode.h"
+#include "e1bcode.h"
 #include "debug.h"
 #include "simd.h"
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-static bool Busy[NUM_L1_SATS];
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -50,8 +47,8 @@ static bool Busy[NUM_L1_SATS];
 
 static fftwf_plan fwd_plan, rev_plan;
 
-// code[sv][...] holds two copies of the FFT: modulo operation on the index is not needed
-static fftwf_complex code[NUM_L1_SATS][2*FFT_LEN] __attribute__ ((aligned (16)));
+// code[sat][...] holds two copies of the FFT: modulo operation on the index is not needed
+static fftwf_complex code[MAX_SATS][2*FFT_LEN] __attribute__ ((aligned (16)));
 
 // fwd_buf is also used for decimating the data
 static fftwf_complex fwd_buf[NSAMPLES + 2*NTAPS] __attribute__ ((aligned (16)));
@@ -67,7 +64,7 @@ static float inline Bipolar(int bit) {
 
 #include <ctype.h>
 
-static int min_sig=MIN_SIG, test_mode;
+static int minimum_sig = MIN_SIG, test_mode;
  
 void SearchParams(int argc, char *argv[]) {
 	int i;
@@ -80,8 +77,8 @@ void SearchParams(int argc, char *argv[]) {
 			xit(0);
 		}
 		if (strcmp(v, "-gsig")==0) {
-			i++; min_sig = strtol(argv[i], 0, 0);
-			printf("GPS min_sig=%d\n", min_sig);
+			i++; minimum_sig = strtol(argv[i], 0, 0);
+			printf("GPS minimum_sig=%d\n", minimum_sig);
 		} else
 		if (strcmp(v, "-gt")==0) {
 			test_mode = 1;
@@ -181,36 +178,141 @@ static int DecimateBy2binary(int size, const char ibuf[][2], fftwf_complex obuf[
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 void SearchInit() {
+    int sat;
+    SATELLITE *sp;
+    for (sat = 0, sp = Sats; sp->prn != -1; sat++, sp++) {
+        sp->sat = sat;
+        switch (sp->type) {
+            case Navstar: default: asprintf(&sp->prn_s, "N%02d ", sp->prn); break;
+            case QZSS: asprintf(&sp->prn_s, "Q%d", sp->prn); break;
+            case E1B: asprintf(&sp->prn_s, "E%02d ", sp->prn); break;
+        }
+        //printf("sat %d PRN %d %s\n", sat, sp->prn, sp->prn_s);
+    }
+    if (sat >= MAX_SATS) {
+        printf("MAX_SATS=%d not big enough, ARRAY_LEN(Sats)=%d\n", MAX_SATS, sat);
+        assert(sat < MAX_SATS);
+    }
+    
+    GPSstat_init();
+    
+    //#define TEST_MULT18
+    #ifdef TEST_MULT18
+        static SPI_MISO sbuf;
+        spi_get_noduplex(CmdTestMult18, &sbuf, 8, 1, 1);
+        u1_t *b = (u1_t *) sbuf.byte;
+        printf("Mult18x18->36->64 %02x%02x %02x%02x %02x%02x %02x%02x\n",
+            b[7], b[6], b[5], b[4], b[3], b[2], b[1], b[0]);
+        xit(0);
+    #endif
+
+    #if 0
+        int prn = 1;
+        E1BCODE e1bt1(prn);
+        //spi_set_noduplex(CmdETrst);
+        #if 1
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x1248);
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x1000);
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x0100);
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x0010);
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x0001);
+            
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x0000);
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x0000);
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x0000);
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x0000);
+        #else
+        for (int i=0; i < I_DIV_CEIL(E1B_CODELEN, 16); i++) {
+            //spi_set_noduplex(CmdSetE1Bcode, 0, E1B_code16[prn-1][i]);
+            //spi_set_noduplex(CmdSetE1Bcode, 0, 0x1111*i);
+        }
+        #endif
+
+        #if 1
+        spi_set_noduplex(CmdETrst);
+        spi_set_noduplex(CmdETw, 0x137f);
+        spi_set_noduplex(CmdETw, 0xbabe);
+        spi_set_noduplex(CmdETw, 0xfeed);
+        #else
+        spi_set_noduplex(CmdETwr, 1);
+        spi_set_noduplex(CmdETw, 0x137f);
+        spi_set_noduplex(CmdETwr, 0);
+        spi_set_noduplex(CmdETw, 0xbabe);
+        spi_set_noduplex(CmdETwr, 2);
+        spi_set_noduplex(CmdETw, 0xfeed);
+        #endif
+
+        static SPI_MISO status;
+        union {
+            u2_t word;
+            struct {
+                u2_t fpga_id:4, stat_user:4, fpga_ver:4, fw_id:3, ovfl:1;
+            };
+        } stat;
+        for (int i=0; i < E1B_CODELEN+16; i++) {
+            //spi_set_noduplex(CmdETrd, i);
+            spi_get_noduplex(CmdGetStatus, &status, 2);
+            stat.word = status.word[0];
+            assert(stat.fpga_id == FPGA_ID);
+            int chip = stat.stat_user & 1;
+            // typ stat.word = 0x51s3
+            printf("E%02d 0x%04x %4d chip %d\n", prn, stat.word, i, chip);
+            spi_set_noduplex(CmdETrd);
+        }
+        xit(0);
+    #endif
+
     const float ca_rate = CPS/FS;
 	float ca_phase=0;
+
+    //#define L1_PRN_TEST
+    #ifdef L1_PRN_TEST
+        printf("L1 PRN test:\n");
+        for (sp = Sats; sp->prn != -1; sp++) {
+            if (sp->type != Navstar) continue;
+            if (sp->prn != 9) continue;
+            CACODE ca(sp->T1, sp->T2);
+            int chips = 0;
+            for (int i=1; i<=16; i++) {
+                chips <<= 1; chips |= ca.Chip(); ca.Clock();
+            }
+            printf("\t%s first 16 chips: 0%04x\n", PRN(sp->sat), chips);
+        }
+        xit(0);
+	#endif
 
     //#define QZSS_PRN_TEST
     #ifdef QZSS_PRN_TEST
         printf("QZSS PRN test:\n");
-        for (int sat = 0; sat < NUM_L1_SATS; sat++) {
-            if (SAT_L1(sat) <= NAVSTAR_PRN_MAX) continue;
-            CACODE ca(Sats_L1[sat].T1, Sats_L1[sat].T2);
+        for (sp = Sats; sp->prn != -1; sp++) {
+            if (sp->type != QZSS) continue;
+            CACODE ca(sp->T1, sp->T2);
             int chips = 0;
             for (int i=1; i<=10; i++) {
                 chips <<= 1; chips |= ca.Chip(); ca.Clock();
             }
-            printf("\tPRN%d first 10 chips: 0%o\n", SAT_L1(sat), chips);
+            printf("\t%s first 10 chips: 0%04o\n", PRN(sp->sat), chips);
         }
+        xit(0);
 	#endif
 
 	printf("DECIM %d FFT %d planning..\n", DECIM, FFT_LEN);
     fwd_plan = fftwf_plan_dft_1d(FFT_LEN, fwd_buf, fwd_buf, FFTW_FORWARD,  FFTW_ESTIMATE);
     rev_plan = fftwf_plan_dft_1d(FFT_LEN, rev_buf, rev_buf, FFTW_BACKWARD, FFTW_ESTIMATE);
 
-    for (int sv=0; sv<NUM_L1_SATS; sv++) {
-		//printf("computing CODE FFT for PRN%d\n", SAT_L1(sv));
-        CACODE ca(Sats_L1[sv].T1, Sats_L1[sv].T2);
+    for (sp = Sats; sp->prn != -1; sp++) {
+        if (sp->type != Navstar && sp->type != QZSS) continue;
+        int T1 = sp->T1, T2 = sp->T2;
+
+		//printf("computing CODE FFT for %s T1 %d T2 %d\n", sp->prn_s, T1, T2);
+        CACODE ca(T1, T2);
 
         for (int i=0; i<NSAMPLES; i++) {
 
             float chip = Bipolar(ca.Chip()); // chip at start of sample period
 
             ca_phase += ca_rate; // NCO phase at end of period
+
             if (ca_phase >= 1.0) { // reached or crossed chip boundary?
                 ca_phase -= 1.0;
                 ca.Clock();
@@ -219,24 +321,96 @@ void SearchInit() {
                 chip *= 1.0 - ca_phase;                 // prev chip
                 chip += ca_phase * Bipolar(ca.Chip());  // next chip
             }
+
 			fwd_buf[i][0] = chip;
 			fwd_buf[i][1] = 0;
 		}
 
-		assert(DECIM > 1);
-		int nsamples = NSAMPLES;
-		for (int i=DECIM; i>1; i>>=1) {
-			nsamples = DecimateBy2float(nsamples, fwd_buf, fwd_buf, false);
-		}
+        int nsamples = NSAMPLES;
+
+        #if DECIM != 1
+            assert(DECIM > 2);
+            for (int i=DECIM; i>1; i>>=1) {
+                nsamples = DecimateBy2float(nsamples, fwd_buf, fwd_buf, false);
+            }
+        #endif
+
 		assert(nsamples == NSAMPLES/DECIM && nsamples == FFT_LEN);
 
 		fftwf_execute(fwd_plan);
 
 		// make two copies of the FFT results in order to avoid modulo operation on the index in Correlate(..)
-		memcpy(code[sv],          fwd_buf, nsamples*sizeof(fftwf_complex));
-		memcpy(code[sv]+nsamples, fwd_buf, nsamples*sizeof(fftwf_complex));
+		memcpy(code[sp->sat],          fwd_buf, nsamples*sizeof(fftwf_complex));
+		memcpy(code[sp->sat]+nsamples, fwd_buf, nsamples*sizeof(fftwf_complex));
+    }
+    
+    //#define E1BCODE_TEST
+    #ifdef E1BCODE_TEST
+        E1BCODE e1bt1(1);
+        for (int i=0; i < 20; i++) {
+            if ((i&3) == 0) printf(" ");
+            printf ("%d", e1bt1.Chip());
+            e1bt1.Clock();
+        }
+        printf(" PRN E1 0xf5d71\n");
+        E1BCODE e1bt2(2);
+        for (int i=0; i < 20; i++) {
+            if ((i&3) == 0) printf(" ");
+            printf ("%d", e1bt2.Chip());
+            e1bt2.Clock();
+        }
+        printf(" PRN E2 0x96b85\n");
+        xit(0);
+    #endif
+
+    float e1b_rate = CPS/FS;
+	float e1b_phase=0;
+
+    for (sp = Sats; sp->prn != -1; sp++) {
+        if (sp->type != E1B) continue;
+
+		//printf("computing CODE FFT for %s\n", sp->prn_s);
+        E1BCODE e1b(sp->prn);
+
+        for (int i=0; i<NSAMPLES; i++) {
+
+            int boc11 = (e1b_phase >= 0.5)? 1:0;    // add in BOC11
+            float chip = Bipolar(e1b.Chip() ^ boc11); // chip at start of sample period
+
+            e1b_phase += e1b_rate; // NCO phase at end of period
+
+            if (e1b_phase >= 1.0) { // reached or crossed chip boundary?
+                e1b_phase -= 1.0;
+                e1b.Clock();
+
+                // These two lines do not make much difference
+                boc11 = (e1b_phase >= 0.5)? 1:0;    // add in BOC11
+                chip *= 1.0 - e1b_phase;                 // prev chip
+                chip += e1b_phase * Bipolar(e1b.Chip() ^ boc11);  // next chip
+            }
+
+            fwd_buf[i][0] = chip;
+            fwd_buf[i][1] = 0;
+		}
+
+        int nsamples = NSAMPLES;
+
+        #if DECIM != 1
+            assert(DECIM > 2);
+            for (int i=DECIM; i>1; i>>=1) {
+                nsamples = DecimateBy2float(nsamples, fwd_buf, fwd_buf, false);
+            }
+        #endif
+
+		assert(nsamples == NSAMPLES/DECIM && nsamples == FFT_LEN);
+
+		fftwf_execute(fwd_plan);
+
+		memcpy(code[sp->sat],          fwd_buf, nsamples*sizeof(fftwf_complex));
+		memcpy(code[sp->sat]+nsamples, fwd_buf, nsamples*sizeof(fftwf_complex));
     }
 
+    //printf("computing CODE FFTs DONE\n");
     CreateTask(SearchTask, 0, GPS_ACQ_PRIORITY);
 }
 
@@ -248,6 +422,27 @@ void SearchFree() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
+
+//#define GPS_SAMPLES_FROM_FILE
+#ifdef GPS_SAMPLES_FROM_FILE
+
+void GenSamples(char *rbuf, int bytes) {
+	int i, j;
+	static int rfd;
+
+	if (!rfd) {
+		rfd = open("../samples/SiGe_Bands-L1.fs.16368.if.4092.rs81p.dat", O_RDONLY);
+		assert(rfd > 0);
+	}
+
+    i = read(rfd, rbuf, bytes);
+    //printf("GenSamples bytes=%d/%d 0x%02x 0x%02x 0x%02x\n", i, bytes, rbuf[0], rbuf[1], rbuf[2]);
+    if (i != bytes) {
+        printf("end of GPS samples data file\n");
+        xit(0);
+    }
+}
+#endif
 
 static void Sample() {
     const int lo_sin[] = {1,1,0,0}; // Quadrature local oscillators
@@ -266,13 +461,19 @@ static void Sample() {
 
 	while (i < NSAMPLES) {
         static SPI_MISO rx;
-		spi_get(CmdGetGPSSamples, &rx, PACKET);
+        
+	    #ifdef GPS_SAMPLES_FROM_FILE
+		    GenSamples(rx.byte, PACKET);
+		#else
+            spi_get(CmdGetGPSSamples, &rx, PACKET);
+        #endif
 
         for (int j=0; j<PACKET; ++j) {
-			int byte = rx.byte[j];
+			u1_t byte = rx.byte[j];
 
             for (int b=0; b<8; ++b, ++i, byte>>=1) {
             	const int bit = (byte&1);
+//printf("j%03d byte 0x%02x bit#%d=%d\n", j, byte, b, bit);
 
                 // Down convert to complex (IQ) baseband by mixing (XORing)
                 // samples with quadrature local oscillators (mix down by FC)
@@ -289,14 +490,24 @@ static void Sample() {
     }
 
     NextTask("samp0");
-	assert(DECIM > 1);
-	int nsamples = DecimateBy2binary(NSAMPLES, bits, fwd_buf, true);
-	NextTask("samp2");
-	for (i=DECIM>>1; i>1; i>>=1) {
-		nsamples = DecimateBy2float(nsamples, fwd_buf, fwd_buf, true);
-		NextTask("samp3");
-	}		
-	assert(nsamples == NSAMPLES/DECIM);
+
+    #if DECIM == 1
+        int nsamples = NSAMPLES;
+        for (i=0; i < nsamples; i++) {
+            fwd_buf[i][0] = Bipolar(bits[i][0]);
+            fwd_buf[i][1] = Bipolar(bits[i][1]);
+        }
+    #else
+	    assert(DECIM > 2);
+        int nsamples = DecimateBy2binary(NSAMPLES, bits, fwd_buf, true);
+        NextTask("samp2");
+        for (i=DECIM>>1; i>1; i>>=1) {
+            nsamples = DecimateBy2float(nsamples, fwd_buf, fwd_buf, true);
+            NextTask("samp3");
+        }
+    #endif
+    
+    assert(nsamples == NSAMPLES/DECIM && nsamples == FFT_LEN);
 	NextTask("samp4");
 	fftwf_execute(fwd_plan); // Transform to frequency domain
     NextTask("samp5");
@@ -304,9 +515,10 @@ static void Sample() {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-static float Correlate(int sv, const fftwf_complex *data, int *max_snr_dop, int *max_snr_i) {
+static float Correlate(int sat, const fftwf_complex *data, int *max_snr_dop, int *max_snr_i) {
     fftwf_complex *prod = rev_buf;
     float max_snr=0;
+    int code_period_ms = is_E1B(sat)? E1B_CODE_PERIOD : L1_CODE_PERIOD;
     int i;
     
     // see paper about baseband FFT symmetry (since input from GPS FE is a real signal)
@@ -315,17 +527,28 @@ static float Correlate(int sv, const fftwf_complex *data, int *max_snr_dop, int 
     //if (test_mode) for (i=fft_len/2; i<fft_len; i++) data[i][0] = data[i][1] = 0;
 
 	// +/- 5 kHz doppler search
-    for (int dop=-5000/BIN_SIZE; dop<=5000/BIN_SIZE; dop++) {
+    for (int dop = -5000/BIN_SIZE; dop <= 5000/BIN_SIZE; dop++) {
         float max_pwr=0, tot_pwr=0;
         int max_pwr_i=0;
 
-		// prod = conj(data)*code, with doppler shifting applied to C/A code FFT
-		simd_multiply_conjugate(FFT_LEN, data, code[sv]+FFT_LEN-dop, prod);
+		// prod = conj(data)*code, with doppler shifting applied to C/A or E1B code FFT
+		#if 1
+		    simd_multiply_conjugate(FFT_LEN, data, code[sat]+FFT_LEN-dop, prod);
+		#else
+            for (i=0; i<FFT_LEN; i++) {
+                int j=(i-dop+FFT_LEN)%FFT_LEN;	// doppler shifting applied to C/A or E1B code FFT
+                prod[i][0] = data[i][0]*code[sat][j][0] + data[i][1]*code[sat][j][1];
+                prod[i][1] = data[i][0]*code[sat][j][1] - data[i][1]*code[sat][j][0];
+            }
+		#endif
         NextTaskP("corr FFT LONG RUN", NT_LONG_RUN);
+        //u4_t us = timer_us();
 		fftwf_execute(rev_plan);
+        //u4_t us2 = timer_us();
         NextTask("corr FFT end");
+        //printf("Correlate FFT %.1f msec\n", (float)(us2-us)/1e3);
 
-        for (i=0; i<SAMPLE_RATE/1000; i++) {		// 1 msec of samples
+        for (i=0; i < SAMPLE_RATE/1000*code_period_ms; i++) {		// 1 msec of samples
             const float pwr = prod[i][0]*prod[i][0] + prod[i][1]*prod[i][1];
             if (pwr>max_pwr) max_pwr=pwr, max_pwr_i=i;
             tot_pwr += pwr;
@@ -334,32 +557,20 @@ static float Correlate(int sv, const fftwf_complex *data, int *max_snr_dop, int 
 
         const float ave_pwr = tot_pwr/i;
         const float snr = max_pwr/ave_pwr;
-        if (snr>max_snr) max_snr=snr, *max_snr_dop=dop, *max_snr_i=max_pwr_i;
-    }		
+        if (snr > max_snr) max_snr=snr, *max_snr_dop=dop, *max_snr_i=max_pwr_i;
+    }
+    
     return max_snr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-int SearchCode(int sv, unsigned int g1) { // Could do this with look-up tables
-    int chips=0;
-    for (CACODE ca(Sats_L1[sv].T1, Sats_L1[sv].T2); ca.GetG1() != g1; ca.Clock()) {
-    	chips++;
-    	if (chips > 1024) {
-    		printf("SearchCode: for PRN%d never found G1 of 0x%03x in PRN sequence!\n", SAT_L1(sv), g1);
-    		return -1;
-    	}
-    }
-    return chips;
-}
+static int searchRestart, searchResume;
 
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-static int searchRestart;
-
-void SearchEnable(int sv) {
-    Busy[sv] = false;
-    searchRestart = sv+1;
+void SearchEnable(int ch, int sat, bool restart) {
+    Sats[sat].busy = false;
+    if (restart) searchRestart = sat+1;
+    //printf("==== %s ch%02d %s\n", restart? "RESTART" : "SIGNAL LOST", ch+1, PRN(sat));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -367,39 +578,73 @@ void SearchEnable(int sv) {
 static int searchTaskID = -1;
 
 void SearchTask(void *param) {
-    int i, us, ret, ch, last_ch=-1, sat, t_sample, lo_shift=0, ca_shift=0;
+    int i, us, ret, ch, last_ch=-1, sat, t_sample, min_sig, lo_shift=0, ca_shift=0;
+    SATELLITE *sp;
     float snr=0;
+    
+    TaskSleepSec(20);   // jks TEMP due to printf/log shared memory malloc/free crash problem
 
 	searchTaskID = TaskID();
 
-    GPSstat(STAT_PARAMS, 0, DECIM, min_sig);
+    GPSstat(STAT_PARAMS, 0, DECIM, minimum_sig);
 	GPSstat(STAT_ACQUIRE, 0, 1);
 
     for(;;) {
-        for (sat=0; sat < NUM_L1_SATS; sat++) {
-        
+        for (sp = Sats; sp->prn != -1; sp++) {
+            sat = sp->sat;
+            //jks
+            if (gps_debug > 0 && sp->prn != gps_debug) continue;    //jks2
+            //if (sp->type != Navstar) continue;
+            if (gps_debug) if (sp->type == E1B) continue;
+            //if (sp->type != E1B) continue;
+            //if (sp->prn != 14) continue;
+            //if (sp->prn != 14 && sp->prn != 30) continue;
+            //if (sp->prn != 11 && sp->prn != 12) continue;
+            //if (sp->prn != 11) continue;
+            
+            //printf("REMINDER: G2_INIT workaround is DISABLED (2)\n");
+            int any_snr = 0;
             if (searchRestart) {
+                searchResume = sat+1;
                 sat = searchRestart-1;
-                //printf("--- SEARCH RESTART sat=%d ---\n", sat);
-                sat--;
+                sp = &Sats[sat];
+                //printf("==== SEARCH RESTART %s\n", PRN(sat));
                 searchRestart = 0;
-                continue;
+                //any_snr = 1;
+            } else
+            if (searchResume) {
+                sat = searchResume-1;
+                sp = &Sats[sat];
+                //printf("==== SEARCH RESUME %s\n", PRN(sat));
+                searchResume = 0;
             }
+            
+            //jks
+            min_sig = (sp->type == E1B)? (any_snr? 1:16) : minimum_sig;
 
-            if (Busy[sat]) {	// sat already acquired?
+            if (sp->busy) {     // sat already acquired?
+//printf("consider %s: BUSY\n", PRN(sat));
                 gps.include_alert_gps = admcfg_bool("include_alert_gps", NULL, CFG_REQUIRED);
             	NextTask("busy1");		// let cpu run
                 continue;
             }
 
-			while ((ch = ChanReset(sat)) < 0) {		// all channels busy?
-				TaskSleepMsec(1000);
-				//NextTask("all chans busy");
-			}
+            #if GALILEO_CHANS == 0
+                while ((ch = ChanReset(sat)) < 0) {		// all channels busy?
+//printf("consider %s: ALL CHAN BUSY\n", PRN(sat));
+                    TaskSleepMsec(1000);
+                    //NextTask("all chans busy");
+                }
+            #else
+                if ((ch = ChanReset(sat)) < 0) {		// all channels busy?
+//printf("consider %s: ALL CHAN BUSY\n", PRN(sat));
+                    continue;
+                }
+            #endif
 			
 			if ((last_ch != ch) && (snr < min_sig)) GPSstat(STAT_SAT, 0, last_ch, -1, 0, 0);
 #ifndef	QUIET
-			printf("FFT-PRN%d\n", SAT_L1(sat)); fflush(stdout);
+			printf("FFT-%s\n", PRN(sat)); fflush(stdout);
 #endif
             us = t_sample = timer_us(); // sample time
             Sample();
@@ -408,26 +653,56 @@ void SearchTask(void *param) {
 			ca_shift *= DECIM;
             
             us = timer_us()-us;
+            //printf("Correlate %s %.3f secs snr=%.0f\n", PRN(sat), (float)us/1000000.0, snr);
+
 #ifndef	QUIET
-			printf("FFT-PRN%d %8.6f secs SNR=%1.1f\n", SAT_L1(sat),
-				(float)us/1000000.0, snr);
-			fflush(stdout);
+//#if 1
+            if (sp->type == E1B && snr >= min_sig) {
+                printf("FFT-%s %.3f secs SNR=%.1f\n", PRN(sat), (float)us/1000000.0, snr);
+                fflush(stdout);
+            }
 #endif
 
+#ifdef GPS_SAMPLES_FROM_FILE
+            if (snr >= 20)
+			printf("%sch%02d %s lo_shift %5d ca_shift %5d snr %5.1f%c \n",
+			    (0 && sp->prn == 30)? "                                            ":"",
+			    ch+1, PRN(sat), (int) (lo_shift*BIN_SIZE), ca_shift, snr, (snr < 16)? '.':'*');
+#endif
+
+#ifdef GPS_SAMPLES_FROM_FILE
+            GPSstat(STAT_SAT, snr, ch, sat, 0, us);
+            last_ch = ch;
+            continue;
+#else
             GPSstat(STAT_SAT, snr, ch, sat, snr < min_sig, us);
+#endif
             last_ch = ch;
 
-            if (snr < min_sig)
+            if (snr < min_sig) {
+//printf("consider %s: LOW SNR\n", PRN(sat));
                 continue;
+            }
+            
+            //jks
+            //continue;
 
-            GPSstat(STAT_DOP, 0, ch, lo_shift, ca_shift);
+            GPSstat(STAT_DOP, 0, ch, lo_shift*BIN_SIZE, ca_shift);
 
-			Busy[sat] = true;
+            sp->busy = true;
 
-			int taps = (Sats_L1[sat].T2 > 10)? (G2_INIT | Sats_L1[sat].T2) : ((Sats_L1[sat].T1<<4) | Sats_L1[sat].T2);
-			//printf("ch%d PRN%d sat=%d snr=%f taps=0x%x/0x%x T1=%d T2=%d lo_shift=%d ca_shift=%d\n",
-			//    ch, SAT_L1(sat), sat, snr, taps, Sats_L1[sat].T2, Sats_L1[sat].T1, Sats_L1[sat].T2, lo_shift, ca_shift);
-			ChanStart(ch, sat, t_sample, taps, lo_shift, ca_shift);
+            int T1 = sp->T1, T2 = sp->T2;
+            int init;
+            
+            switch (sp->type) {
+                case Navstar: default: init = (T1<<4) + T2; break;
+                case QZSS: init = G2_INIT | T2; break;
+                case E1B: init = E1B_MODE | (sp->prn-1); break;
+            }
+
+			//printf("ChanStart ch%02d %s snr=%.0f init=0x%x lo_shift=%d ca_shift=%d\n",
+			//    ch+1, PRN(sat), snr, init, (int) (lo_shift*BIN_SIZE), ca_shift);
+            ChanStart(ch, sat, t_sample, init, lo_shift, ca_shift, (int) snr);
     	}
 	}
 }
@@ -461,7 +736,7 @@ bool SearchTaskRun()
 	
 	bool enable = (admcfg_bool("enable_gps", NULL, CFG_REQUIRED) == true);
 	if (!enable) start = false;
-	
+
 	//printf("SearchTaskRun: acq %d start %d good %d users %d fixes %d gps_corr %d\n",
 	//	gps_acquire, start, gps.good, users, gps.fixes, clk.adc_gps_clk_corrections);
 	

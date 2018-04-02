@@ -24,36 +24,41 @@ module DEMOD (
     input  wire        clk,
     input  wire        rst,
     input  wire        sample,
-    input  wire        ca_resume, 
+    input  wire        cg_resume, 
     input  wire        wrReg,
     input  wire [15:0] op,
     input  wire [31:0] tos,
     input  wire        shift,
+    
+    output reg [E1B_CODEBITS-1:0]  nchip,
+    input  wire        e1b_code,
+    
     output wire        sout,
     output reg         ms0,
-    output wire [15:0] replica
+    output wire [GPS_REPL_BITS-1:0] replica
 );
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Select SV
+    // Select sat
 
-    reg g2_init;
+    reg e1b_mode, g2_init;
     reg [10:1] init;
 
     always @ (posedge clk)
-        if (wrReg && op[SET_SV])
-            {g2_init, init} <= tos[10:0];
+        if (wrReg && op[SET_SAT]) begin
+            {e1b_mode, g2_init, init} <= tos[11:0];
+        end
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Pause code generator (to align with SV)
+    // Pause code generator (to align with sat)
 
-    reg ca_en;
+    reg cg_en;
 
     always @ (posedge clk)
         if (wrReg && op[SET_PAUSE])
-            ca_en <= 0;
-        else if (~ca_en)
-            ca_en <= ca_resume;
+            cg_en <= 0;
+        else if (~cg_en)
+            cg_en <= cg_resume;
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NCOs
@@ -61,56 +66,128 @@ module DEMOD (
     reg  [31:0] lo_rate = 0;
     wire [31:0] lo_phase;
 
-    reg  [31:0] ca_rate = 0, ca_phase = 0;
-    wire [31:0] ca_sum;
+    reg  [31:0] cg_rate = 0, cg_phase = 0;
+    wire [31:0] cg_sum;
 
-    wire half_chip;
     wire full_chip;
+    wire half_chip;
+    wire quarter_chip;
+    wire full_chip_en = full_chip & cg_en;
+    
+    ip_add_u30b cg_nco (.a(cg_phase[29:0]), .b(cg_rate[29:0]), .s({quarter_chip, cg_sum[29:0]}), .c_in(1'b0));
+    
+    wire a30 = cg_phase[30];
+    wire b30 = cg_rate[30];
+    wire ci30 = quarter_chip;
+    
+	wire d30 = a30 ^ b30;
+	XORCY xorcy30 (         .LI(d30), .CI(ci30), .O(cg_sum[30]));	
+	MUXCY muxcy30 (.S(d30), .DI(a30), .CI(ci30), .O(half_chip));
 
-    ip_add_u31b ca_nco (.a(ca_phase[30:0]), .b(ca_rate[30:0]), .s({half_chip, ca_sum[30:0]}), .c_in(1'b0));
+    wire a31 = cg_phase[31];
+    wire b31 = cg_rate[31];
+    wire ci31 = half_chip;
     
-    wire a = ca_phase[31];
-    wire b = ca_rate[31];
-    wire ci = half_chip;
-    
-	wire d = a ^ b;
-	XORCY xorcy (       .LI(d), .CI(ci), .O(ca_sum[31]));	
-	MUXCY muxcy (.S(d), .DI(a), .CI(ci), .O(full_chip));
+	wire d31 = a31 ^ b31;
+	XORCY xorcy31 (         .LI(d31), .CI(ci31), .O(cg_sum[31]));	
+	MUXCY muxcy31 (.S(d31), .DI(a31), .CI(ci31), .O(full_chip));
 
 	ip_acc_u32b lo_nco (.clk(clk), .sclr(1'b0), .b(lo_rate), .q(lo_phase));
 
     always @ (posedge clk) begin
         if (wrReg && op[SET_LO_NCO]) lo_rate <= tos;
-        if (wrReg && op[SET_CA_NCO]) ca_rate <= tos;
-        if (rst) ca_phase <= 0; else if (ca_en) ca_phase <= ca_sum;
+        if (wrReg && op[SET_CG_NCO]) cg_rate <= tos;
+        if (rst) cg_phase <= 0; else if (cg_en) cg_phase <= cg_sum;
     end
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // C/A code and epoch
+    // code generators
 
-    wire       ca_e;
-    wire [9:0] g1_e;
-    reg  [9:0] g1_p;
-    reg        ca_p, ms1, ca_l = 0;
-
-    always @ (posedge clk)
-        if (half_chip)
-            if (full_chip)
-                ca_l <= ca_p;
-            else begin
-                ca_p <= ca_e;
-                g1_p <= g1_e;
-                ms0 <= &g1_e; // Epoch
-            end
-        else
-            ms0 <= 0;
+    reg [E1B_CODEBITS-1:0] chips;
+    reg cg_p, ms1, cg_l = 0;
 
     always @ (posedge clk)
         ms1 <= ms0;
         
-    wire ca_rd = full_chip & ca_en;
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // C/A, E1B code and epoch
 
-    CACODE ca (.rst(rst), .clk(clk), .g2_init(g2_init), .init(init), .rd(ca_rd), .g1(g1_e), .chip(ca_e));
+    wire ca_chip;
+    reg e1b_latched_code;
+
+    wire boc11 = cg_phase[31];      // bit that toggles at the half-chip rate = 1x chip frequency
+    wire e1b_chip = e1b_latched_code ^ boc11;
+
+    wire cg_e = e1b_mode? e1b_chip : ca_chip;
+
+    reg quarter_after_full;
+
+    always @ (posedge clk) begin
+        if (rst)
+            nchip <= 0;
+        else
+        
+        // Due to BOC11 need to do twice as many EPL latchings because e = code ^ boc11 has
+        // twice as many states as e = code.
+        //
+        // FHQ  e=n, l=p
+        // --Q  p=e, chips, ms0
+        // -HQ  l=p
+        // --Q  p=e
+        //
+        // Without BOC 11 was: (note missing second l=p and p=e)
+        //
+        // FHQ  e=n
+        // --Q  p=e, chips, ms0
+        // -HQ  l=p
+        // --Q  
+
+        if (e1b_mode) begin
+            if (full_chip_en)
+                nchip <= (nchip == (E1B_CODELEN-1))? 0 : (nchip+1);
+
+            if (full_chip) begin
+                e1b_latched_code <= e1b_code;
+                cg_l <= cg_p;
+                quarter_after_full <= 1;
+            end
+
+            if (quarter_chip && !full_chip) begin
+                if (half_chip)
+                    cg_l <= cg_p;
+                else
+                    cg_p <= cg_e;
+
+                if (quarter_after_full && !half_chip) begin
+                    chips <= nchip;         // for replica
+                    ms0 <= (nchip == 0);    // Epoch
+                    quarter_after_full <= 0;
+                end else
+                    ms0 <= 0;
+
+            end
+            else
+                ms0 <= 0;
+        end
+        else begin
+            if (full_chip_en)
+                nchip <= (nchip == (L1_CODELEN-1))? 0 : (nchip+1);
+                
+            if (half_chip)
+                if (full_chip)
+                    cg_l <= cg_p;
+                else begin
+                    cg_p <= cg_e;
+                    chips <= nchip;         // for replica
+                    ms0 <= (nchip == 0);    // Epoch
+                end
+            else
+                ms0 <= 0;
+        end
+    end
+
+    wire ca_rd = full_chip_en;
+    CACODE ca (.rst(rst), .clk(clk), .g2_init(g2_init), .init(init), .rd(ca_rd), .chip(ca_chip));
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Quadrature final LO
@@ -124,23 +201,24 @@ module DEMOD (
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Down-convert to baseband
 
-    reg        lsb, die, dqe, dip, dqp, dil, dql;
-    reg [16:1] ie, qe, ip, qp, il, ql;		// register length chosen to not overflow with our 16.384 MHz GPS clock
+    reg lsb, die, dqe, dip, dqp, dil, dql;
+    // register length chosen to not overflow with our 16.368 MHz GPS clock and code length
+    reg [GPS_INTEG_BITS:1] ie, qe, ip, qp, il, ql;
 
     always @ (posedge clk) begin
 
         // Mixers
-        die <= sample^ca_e^LO_I; dqe <= sample^ca_e^LO_Q;
-        dip <= sample^ca_p^LO_I; dqp <= sample^ca_p^LO_Q;
-        dil <= sample^ca_l^LO_I; dql <= sample^ca_l^LO_Q;
+        die <= sample^cg_e^LO_I; dqe <= sample^cg_e^LO_Q;
+        dip <= sample^cg_p^LO_I; dqp <= sample^cg_p^LO_Q;
+        dil <= sample^cg_l^LO_I; dql <= sample^cg_l^LO_Q;
 
         // Filters 
-        ie <= (ms1? 16'b0 : ie) + {16{die}} + lsb;
-        qe <= (ms1? 16'b0 : qe) + {16{dqe}} + lsb;
-        ip <= (ms1? 16'b0 : ip) + {16{dip}} + lsb;
-        qp <= (ms1? 16'b0 : qp) + {16{dqp}} + lsb;
-        il <= (ms1? 16'b0 : il) + {16{dil}} + lsb;
-        ql <= (ms1? 16'b0 : ql) + {16{dql}} + lsb;
+        ie <= (ms1? {GPS_INTEG_BITS{1'b0}} : ie) + {GPS_INTEG_BITS{die}} + lsb;
+        qe <= (ms1? {GPS_INTEG_BITS{1'b0}} : qe) + {GPS_INTEG_BITS{dqe}} + lsb;
+        ip <= (ms1? {GPS_INTEG_BITS{1'b0}} : ip) + {GPS_INTEG_BITS{dip}} + lsb;
+        qp <= (ms1? {GPS_INTEG_BITS{1'b0}} : qp) + {GPS_INTEG_BITS{dqp}} + lsb;
+        il <= (ms1? {GPS_INTEG_BITS{1'b0}} : il) + {GPS_INTEG_BITS{dil}} + lsb;
+        ql <= (ms1? {GPS_INTEG_BITS{1'b0}} : ql) + {GPS_INTEG_BITS{dql}} + lsb;
 
         lsb <= ms1? 1'b0 : ~lsb; 
 
@@ -149,7 +227,9 @@ module DEMOD (
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Serial output of IQ accumulators to embedded CPU
 
-    reg [95:0] ser_iq;	// 16*6 = 96 bits
+    localparam SER_IQ_MSB = (6 * GPS_INTEG_BITS) - 1;
+    
+    reg [SER_IQ_MSB:0] ser_iq;
 
     always @ (posedge clk)
         if (ms1)
@@ -157,11 +237,19 @@ module DEMOD (
        else if (shift)
           ser_iq <= ser_iq << 1;
 
-    assign sout = ser_iq[95];
+    assign sout = ser_iq[SER_IQ_MSB];
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Clock replica
 
-    assign replica = {~ca_phase[31], ca_phase[30:26], g1_p};
+    generate
+        if (GPS_REPL_BITS == 16) begin
+            assign replica = {~cg_phase[31], cg_phase[30:26], chips[9:0]};
+        end
+
+        if (GPS_REPL_BITS == 18) begin
+            assign replica = {~cg_phase[31], cg_phase[30:26], chips[9:0], chips[11:10]};
+        end
+    endgenerate
 
 endmodule

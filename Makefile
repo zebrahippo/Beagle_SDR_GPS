@@ -82,9 +82,11 @@ PVT_EXTS = $(subst $(PVT_EXT_DIR)/,,$(wildcard $(PVT_EXT_DIR)/*))
 INT_EXTS = $(subst /,,$(subst extensions/,,$(wildcard $(INT_EXT_DIRS))))
 EXTS = $(INT_EXTS) $(PVT_EXTS)
 
+GPS = gps gps/ka9q-fec gps/GNSS-SDRLIB
+
 ifeq ($(OPT),O0)
 	DIRS = . pru $(PKGS) web extensions
-	DIRS += platform/$(PLATFORM) $(EXT_DIRS) rx rx/CuteSDR rx/csdr rx/kiwi gps ui support arch arch/$(ARCH)
+	DIRS += platform/$(PLATFORM) $(EXT_DIRS) rx rx/CuteSDR rx/csdr rx/kiwi $(GPS) ui support arch arch/$(ARCH)
 else
 	DIRS = . pru $(PKGS) web extensions
 endif
@@ -92,7 +94,7 @@ endif
 ifeq ($(OPT),O0)
 	DIRS_O3 =
 else
-	DIRS_O3 = platform/$(PLATFORM) $(EXT_DIRS) rx rx/CuteSDR rx/csdr rx/kiwi gps ui support arch arch/$(ARCH)
+	DIRS_O3 = platform/$(PLATFORM) $(EXT_DIRS) rx rx/CuteSDR rx/csdr rx/kiwi $(GPS) ui support arch arch/$(ARCH)
 endif
 
 VPATH = $(DIRS) $(DIRS_O3)
@@ -391,6 +393,8 @@ EXISTS_DX = $(shell test -f $(DIR_CFG)/$(CFG_DX); echo $$?)
 CFG_DX_MIN = dx.min.json
 EXISTS_DX_MIN = $(shell test -f $(DIR_CFG)/$(CFG_DX_MIN); echo $$?)
 
+ETC_HOSTS_HAS_KIWI = $(shell grep -qi kiwisdr /etc/hosts; echo $$?)
+
 # Only do a 'make install' on the target machine (not needed on the development machine).
 # For the Beagle this installs the device tree files in the right place and other misc stuff.
 install: $(LIBS_DEP) $(ALL_DEPS) kiwid.bin
@@ -412,7 +416,7 @@ else
 	install -D -o root -g root KiwiSDR.bit /usr/local/bin/KiwiSDRd.bit
 #
 	install -o root -g root unix_env/kiwid /etc/init.d
-	install -o root -g root unix_env/kiwid.service /etc/systemd/system
+	install -o root -g root -m 0644 unix_env/kiwid.service /etc/systemd/system
 	install -D -o root -g root -m 0644 unix_env/$(CAPE).dts /lib/firmware/$(CAPE).dts
 	install -D -o root -g root -m 0644 unix_env/$(SPI).dts /lib/firmware/$(SPI).dts
 	install -D -o root -g root -m 0644 unix_env/$(PRU).dts /lib/firmware/$(PRU).dts
@@ -461,6 +465,11 @@ ifeq ($(EXISTS_CONFIG),1)
 	@echo installing $(DIR_CFG)/$(CFG_CONFIG)
 	@mkdir -p $(DIR_CFG)
 	cp $(DIR_CFG_SRC)/dist.$(CFG_CONFIG) $(DIR_CFG)/$(CFG_CONFIG)
+endif
+
+ifeq ($(ETC_HOSTS_HAS_KIWI),1)
+	@echo appending kiwisdr to /etc/hosts
+	@echo '127.0.0.1       kiwisdr' >>/etc/hosts
 endif
 
 	systemctl enable kiwid.service

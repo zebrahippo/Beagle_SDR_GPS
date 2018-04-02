@@ -41,6 +41,7 @@ enum SPI_CMD { // Embedded CPU commands, order must match 'Commands:' table in .
 	CmdFlush,
     CmdTestRead,
     CmdUploadStackCheck,
+    CmdGetSPRP,
 
 	// SDR
 #if RX_CHANS
@@ -61,11 +62,12 @@ enum SPI_CMD { // Embedded CPU commands, order must match 'Commands:' table in .
 #if GPS_CHANS
     CmdSample,
     CmdSetMask,
-    CmdSetRateCA,
+    CmdSetRateCG,
     CmdSetRateLO,
-    CmdSetGainCA,
+    CmdSetGainCG,
     CmdSetGainLO,
-    CmdSetSV,
+    CmdSetSat,
+    CmdSetE1Bcode,
     CmdPause,
     CmdGetGPSSamples,
     CmdGetChan,
@@ -73,6 +75,7 @@ enum SPI_CMD { // Embedded CPU commands, order must match 'Commands:' table in .
     CmdGetGlitches,
     CmdIQLogReset,
     CmdIQLogGet,
+    CmdTestMult18,
 #endif
     
     CmdCheckLast
@@ -94,6 +97,7 @@ static const char *cmds[] = {
 	"CmdFlush",
     "CmdTestRead",
     "CmdUploadStackCheck",
+    "CmdGetSPRP",
 
 	// SDR
 #if RX_CHANS
@@ -114,11 +118,12 @@ static const char *cmds[] = {
 #if GPS_CHANS
     "CmdSample",
     "CmdSetMask",
-    "CmdSetRateCA",
+    "CmdSetRateCG",
     "CmdSetRateLO",
-    "CmdSetGainCA",
+    "CmdSetGainCG",
     "CmdSetGainLO",
-    "CmdSetSV",
+    "CmdSetSat",
+    "CmdSetE1Bcode",
     "CmdPause",
     "CmdGetGPSSamples",
     "CmdGetChan",
@@ -126,6 +131,7 @@ static const char *cmds[] = {
     "CmdGetGlitches",
     "CmdIQLogReset",
     "CmdIQLogGet",
+    "CmdTestMult18",
 #endif
 };
 

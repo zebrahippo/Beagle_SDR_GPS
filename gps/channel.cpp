@@ -21,6 +21,14 @@
 #include "gps.h"
 #include "spi.h"
 #include "ephemeris.h"
+#include "fec.h"
+
+#undef B
+#undef K
+#undef M
+#undef I
+#undef Q
+#include "gnss_sdrlib.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -39,10 +47,11 @@ struct UPLOAD { // Embedded CPU CHANNEL structure
     uint16_t nav_buf[MAX_NAV_BITS/16];  // NAV data buffer
     uint16_t ca_freq[4];            // Loop filter integrator
     uint16_t lo_freq[4];            // Loop filter integrator
-     int16_t iq[2];                 // Last I, Q samples
+    uint16_t iq[3][4];              // Last PIQ, PEIQ, PLIQ samples
     uint16_t ca_gain[2];            // Code loop ki, kp
     uint16_t lo_gain[2];            // Carrier loop ki, kp
     uint16_t ca_unlocked;
+    uint16_t E1B_mode;
     //uint16_t pp[2], pe[2], pl[2];
 };
 
@@ -51,30 +60,36 @@ struct CHANNEL { // Locally-held channel data
     float pwr_tot, pwr[PWR_LEN];    // Running average of signal power
     int pwr_pos;                    // Circular counter
     int gain_adj;                   // AGC
-    int ch, sv;                     // Association
+    int gain_adj2;
+    int ch, sat;                    // Association
+    int isE1B;
     int alert;                      // Subframe alert flag
     int probation;                  // Temporarily disables use if channel noisy
     int holding, rd_pos;            // NAV data bit counters
     u4_t id;
-    int last_taps, last_sv;
+    int last_codegen_init, last_sat;
+    int subframe_bits, nsync, total_bits, bits_tow, expecting_preamble, drop_seq;
+    //jks2
+    int LASTsub;
+    sdrnav_t nav;
 	SPI_MISO miso;
 	
-    void  Reset();
-    void  Start(int sv, int t_sample, int taps, int lo_shift, int ca_shift);
+    void  Reset(int sat);
+    void  Start(int sat, int t_sample, int codegen_init, int lo_shift, int ca_shift, int snr);
     void  SetGainAdj(int);
     int   GetGainAdj();
     void  CheckPower();
     float GetPower();
     void  Service();
-    void  Acquisition();
+    void  Acquisition(bool delay);
     void  Tracking();
-    void  SignalLost();
+    void  SignalLost(bool restart);
     void  UploadEmbeddedState();
     int   ParityCheck(char *buf, int *nbits);
     void  Subframe(char *buf);
     void  Status();
     int   RemoteBits(uint16_t wr_pos);
-    bool  GetSnapshot(uint16_t wr_pos, int *p_sv, int *p_bits, float *p_pwr);
+    bool  GetSnapshot(uint16_t wr_pos, int *p_sat, int *p_bits, int *p_bits_tow, float *p_pwr);
 };
 
 static CHANNEL Chans[GPS_CHANS];
@@ -83,17 +98,28 @@ static unsigned BusyFlags;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-static double GetFreq(uint16_t *u) { // Convert NCO command to Hertz
+static double Get32(uint16_t *u) {
+	return ( u[0] * pow(2, 0)
+		   + u[1] * pow(2, 16));
+}
+
+static double Get64_frac(uint16_t *u) {
 	return ( u[0] * pow(2, -64)
 		   + u[1] * pow(2, -48)
 		   + u[2] * pow(2, -32)
-		   + u[3] * pow(2, -16)) * FS;
+		   + u[3] * pow(2, -16));
+}
+
+static double GetFreq(uint16_t *u) { // Convert NCO command to Hertz
+	return Get64_frac(u) * FS;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const char preambleUpright [] = {1,0,0,0,1,0,1,1};
-const char preambleInverse [] = {0,1,1,1,0,1,0,0};
+#define L1_PRELEN 8
+
+const char L1preambleUpright [] = {1,0,0,0,1,0,1,1};
+const char L1preambleInverse [] = {0,1,1,1,0,1,0,0};
 
 static int parity(char *p, char *word, char D29, char D30) {
     char *d = word-1;
@@ -106,6 +132,17 @@ static int parity(char *p, char *word, char D29, char D30) {
     p[5] = D29 ^ d[3] ^ d[5] ^ d[6] ^ d[8] ^ d[9] ^ d[10] ^ d[11] ^ d[13] ^ d[15] ^ d[19] ^ d[22] ^ d[23] ^ d[24];
     return memcmp(d+25, p, 6);
 }
+
+#define E1B_PRELEN      10
+#define E1B_NSYM        240
+#define E1B_NBIT        120
+#define E1B_TAIL        6
+#define E1B_TSYM_PP     (E1B_PRELEN + E1B_NSYM)
+#define E1B_TSYM_PW     (E1B_TSYM_PP * 2)
+
+const char E1BpreambleUpright [] = {0,1,0,1,1,0,0,0,0,0};
+const char E1BpreambleInverse [] = {1,0,1,0,0,1,1,1,1,1};
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -120,52 +157,74 @@ void CHANNEL::UploadEmbeddedState() {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 int CHANNEL::GetGainAdj() {
+    if (gps.gps_gain == 0) gps.gps_gain = 1;
+    if (ch == gps.IQ_data_ch-1 && gain_adj2 != gps.gps_gain-1) {
+        gain_adj2 = gps.gps_gain-1;
+        SetGainAdj(gain_adj);
+    }
+    
     return gain_adj;
 }
 
 void CHANNEL::SetGainAdj(int adj) {
     gain_adj = adj;
 
-    int lo_ki = 20 + gain_adj;
-    int lo_kp = 27 + gain_adj;
+    #define E1B_LO_GAIN_ADJ -5
+    int lo_ki = 20 + (isE1B? E1B_LO_GAIN_ADJ : 0) + gain_adj - gain_adj2;
+    int lo_kp = 27 + (isE1B? E1B_LO_GAIN_ADJ : 0) + gain_adj - gain_adj2;
+    
+    //printf("ch%02d %s CmdSetGainLO gain=%d gain2=%d ki=%d kp=%d\n",
+    //    ch+1, PRN(sat), gain_adj, gain_adj2, lo_ki, lo_kp);
 
     spi_set(CmdSetGainLO, ch, lo_ki + ((lo_kp-lo_ki)<<16));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-void CHANNEL::Reset() {
+void CHANNEL::Reset(int sat) {
+    this->sat = sat;
+    isE1B = is_E1B(sat);
+    
     uint32_t ca_rate = CPS/FS*powf(2,32);
-    spi_set(CmdSetRateCA, ch, ca_rate);
+    spi_set(CmdSetRateCG, ch, ca_rate);
 
     int ca_ki = 20-9;	// 11
     int ca_kp = 27-4;	// 23, kp-ki = 12
+    
+    if (0 && isE1B) {
+        ca_ki -= 2;
+        ca_kp -= 2;
+    }
 
-    spi_set(CmdSetGainCA, ch, ca_ki + ((ca_kp-ca_ki)<<16));
+    spi_set(CmdSetGainCG, ch, ca_ki + ((ca_kp-ca_ki)<<16));
 
     SetGainAdj(0);
 
     memset(pwr, 0, sizeof pwr);
     pwr_tot=0;
     pwr_pos=0;
-    probation=2;
+    probation=2;    // skip the first few valid subframes so TOW can become valid
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 void CHANNEL::Start( // called from search thread to initiate acquisition
-    int sv_,
+    int sat,
     int t_sample,
-    int taps,
+    int codegen_init,
     int lo_shift,
-    int ca_shift) {
+    int ca_shift,
+    int snr) {
 
-    this->sv = sv_;
-    Ephemeris[sv].prn = Sats_L1[sv_].prn;
+    this->sat = sat;
+    isE1B = is_E1B(sat);
+    nav.sat = sat;
+    Ephemeris[sat].Init(sat);
+    subframe_bits = isE1B? E1B_TSYM_PW:300;
 
     // Estimate Doppler from FFT bin shift
     double lo_dop = lo_shift*BIN_SIZE;
-    double ca_dop = (lo_dop/L1)*CPS;
+    double ca_dop = (lo_dop/L1_f)*CPS;
 
     // NCO rates
     uint32_t lo_rate = (FC  + lo_dop)/FS*pow(2,32);
@@ -173,7 +232,7 @@ void CHANNEL::Start( // called from search thread to initiate acquisition
 
     // Initialise code and carrier NCOs
     spi_set(CmdSetRateLO, ch, lo_rate);
-    spi_set(CmdSetRateCA, ch, ca_rate);
+    spi_set(CmdSetRateCG, ch, ca_rate);
 
     // Seconds elapsed since sample taken
     double secs = (timer_us()-t_sample) / 1e6;
@@ -182,14 +241,62 @@ void CHANNEL::Start( // called from search thread to initiate acquisition
     int code_creep = nearbyint((ca_dop*secs/CPS)*FS);
 
     // Align code generator by pausing NCO
-    uint32_t ca_pause = ((FS_I*2/1000)-(ca_shift+code_creep)) % (FS_I/1000);
+    int code_period_ms = isE1B? E1B_CODE_PERIOD : L1_CODE_PERIOD;
+    int code_period_samples = FS_I/1000 * code_period_ms;
+    uint32_t ca_pause = (code_period_samples*2 - (ca_shift+code_creep)) % code_period_samples;
+    assert(ca_pause <= 0xffff);     // hardware limit
 
 	if (ca_pause) spi_set(CmdPause, ch, ca_pause-1);
-    spi_set(CmdSetSV, ch, taps); // Gold Code taps
+    spi_set(CmdSetSat, ch, codegen_init);
+
+    if (0) printf("Start ch%02d code_period_ms %d codegen_init=0x%03x lo_shift %5d ca_pause %5d snr %3d %s\n",
+        ch+1, code_period_ms, codegen_init,
+        (int) (lo_shift*BIN_SIZE), ca_pause, snr, PRN(sat));
+    bool isDifferent = (last_codegen_init != codegen_init);
     
-    // Interesting situation for sats which set the code generator via G2 initialization (e.g. QZSS sats).
+    if (isE1B && isDifferent) {
+        // download E1B code table
+        // assumes BRAM write address is zero from prior reset
+        for (int i=0; i < I_DIV_CEIL(E1B_CODELEN, 16); i++) {
+            u2_t code = E1B_code16[Sats[sat].prn-1][i];
+            spi_set_noduplex(CmdSetE1Bcode, ch, code);
+            //printf("E%02d %02d 0x%04x\n", Sats[sat].prn, i, code);
+            // download slowly so as not to potentially starve other eCPU tasks
+            if ((i%4) == 3)
+                TaskSleepMsec(1);
+        }
+        //printf("**** downloaded E1B code table ch%02d %s\n", ch+1, PRN(sat));
+        
+        //jks
+        #if 0
+            // reset read pointer
+            spi_set_noduplex(CmdSetMask, 0);
+            spi_set_noduplex(CmdSample);
+            
+            static SPI_MISO status;
+            union {
+                u2_t word;
+                struct {
+                    u2_t fpga_id:4, stat_user:4, fpga_ver:4, fw_id:3, ovfl:1;
+                };
+            } stat;
+            for (int i=0; i < E1B_CODELEN+16; i++) {
+                spi_get_noduplex(CmdGetStatus, &status, 2);
+                stat.word = status.word[0];
+                assert(stat.fpga_id == FPGA_ID);
+                int chip = stat.stat_user & 1;
+                // typ stat.word = 0x51s3
+                printf("%s 0x%04x %4d chip %d\n", PRN(sat), stat.word, i, chip);
+                spi_set(CmdETrd, ch);
+            }
+            xit(0);
+        #endif
+    }
+    
+    // Interesting situation for sats which set the code generator via G2 initialization
+    // e.g. QZSS sats, but not Navstar or Galileo (E1B) sats.
     //
-    // When the acquisition FFT sampling is initiated via CmdSample all the code generators of the idle channels
+    // When the acquisition FFT sampling is initiated via CmdSample all the G1/G2 parts of the code generators of the idle channels
     // are simultaneously reset (to all ones in the case of tapped code generators). This needs to be done to achieve
     // proper code alignment with the code phase determined by the FFT (e.g. CmdPause).
     // But for G2 initialized generators we don't know the init value until after acquisition, and the PRN is known,
@@ -199,20 +306,32 @@ void CHANNEL::Start( // called from search thread to initiate acquisition
     // Some additional logic is required to get the same channel (hence generator) to be reused on the re-acquisition.
     //
     // Have to do the same when needing a tapped code generator on a channel that previously used G2 init mode.
-    
-    bool need_g2_init = ((taps & G2_INIT) && last_taps != taps);
-    bool need_taps = (!(taps & G2_INIT) && ((last_taps & G2_INIT)));
-    if (need_g2_init || need_taps) {
-        //printf("ch%d PRN%d %s REUSE taps: is 0x%x want 0x%x\n",
-        //    ch, Sats_L1[sv].prn, need_g2_init? "g2_init" : "taps", last_taps, taps);
-        last_taps = taps;
-        SignalLost();
+
+    bool wantG2 = (codegen_init & G2_INIT);
+    bool wantE1B = (codegen_init & E1B_MODE);
+    bool wantTaps = (!wantG2 && !wantE1B);
+
+    bool wasG2 = (last_codegen_init & G2_INIT);
+    bool wasE1B = (last_codegen_init & E1B_MODE);
+    bool wasTaps = (!wasG2 && !wasE1B);
+
+    bool needG2 = (wantG2 && isDifferent);
+    bool needE1B = (wantE1B && isDifferent);
+    bool needTaps = (wantTaps && isDifferent);
+
+    //printf("REMINDER: G2_INIT workaround is DISABLED\n");
+    if (1 && (needG2 || needE1B || needTaps)) {
+        if (0) printf("==== ch%02d %s need %s, REUSE codegen_init: last 0x%x want 0x%x\n",
+            ch+1, PRN(sat), needG2? "g2_init" : (needE1B? "E1B" : "taps"),
+            last_codegen_init, codegen_init);
+        last_codegen_init = codegen_init;
+        SignalLost(true);
         return;
     }
     
-    //printf("ch%d PRN%d OK\n", ch, Sats_L1[sv].prn);
-    last_taps = taps;
-
+    //printf("ch%02d %s OK\n", ch+1, PRN(sat));
+    last_codegen_init = codegen_init;
+    
     // Wait 3 epochs to be sure phase errors are valid before ...
     TaskSleepMsec(3);
     // ... enabling embedded PI controllers
@@ -223,7 +342,7 @@ void CHANNEL::Start( // called from search thread to initiate acquisition
 
 #ifndef QUIET
     printf("Channel %d prn%d lo_dop %f lo_rate 0x%x ca_dop %f ca_rate 0x%x pause %d\n\n",
-    	ch, Sats_L1[sv].prn, lo_dop, lo_rate, ca_dop, ca_rate, ca_pause-1);
+    	ch, Sats[sat].prn, lo_dop, lo_rate, ca_dop, ca_rate, ca_pause-1);
 #endif
 }
 
@@ -233,14 +352,14 @@ void CHANNEL::Service() {
 
     /* entered from channel thread after search thread has called Start() */
 
-    Acquisition();
+    Acquisition(true);
     Tracking();
-    SignalLost();
+    SignalLost(false);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-void CHANNEL::Acquisition() {
+void CHANNEL::Acquisition(bool delay) {
 
     // Code loop always locks, but carrier loop sometimes needs help!
 
@@ -248,7 +367,8 @@ void CHANNEL::Acquisition() {
     // initial Doppler estimate (FFT bin size) is larger than loop bandwidth.
 
     // Give them 5 seconds ...
-	TaskSleepMsec(5000);
+    if (delay)
+	    TaskSleepMsec(5000);
 
     // Get accurate Doppler measurement from locked code NCO
     UploadEmbeddedState();
@@ -257,12 +377,12 @@ void CHANNEL::Acquisition() {
 	double ca_dop = ca_freq - CPS;
 
     // Put carrier NCO precisely on-frequency.  Now it will lock.
-	double ca2lo_dop = ca_dop*L1/CPS;
+	double ca2lo_dop = ca_dop*L1_f/CPS;
 	double f_lo_rate = (FC + ca2lo_dop)/FS;
 	uint32_t lo_rate = f_lo_rate*pow(2,32);
 
 #ifndef QUIET
-	printf("Channel %d prn%d new lo_rate 0x%x\n", ch, Sats_L1[sv].prn, lo_rate);
+	printf("Channel %d sat%d new lo_rate 0x%x\n", ch, Sats[sat].prn, lo_rate);
 #endif
 
     spi_set(CmdSetRateLO, ch, lo_rate);
@@ -271,18 +391,27 @@ void CHANNEL::Acquisition() {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 void CHANNEL::Tracking() {
-    char buf[300 + MAX_NAV_BITS - 1];
+    //char buf[300 + MAX_NAV_BITS - 1];
+    char buf[E1B_TSYM_PW + MAX_NAV_BITS - 1];
 
     const int POLLING_PS = 4;  // Poll 4 times per second
     const int POLLING_US = 1000000 / POLLING_PS;
+    
+    assert(E1B_BPS/POLLING_PS < MAX_NAV_BITS/2);    // make sure there is enough buffering for poll rate
 
     const int TIMEOUT = 60 * POLLING_PS;   // Bail after 60 seconds on LOS
+    const int TIMEOUT_E1B = 90 * POLLING_PS;
 
-	const int LOW_BITS_TIMEOUT = 60 * POLLING_PS;
+	//const int LOW_BITS_TIMEOUT = 60 * POLLING_PS;
+	const int LOW_BITS_TIMEOUT = 90 * POLLING_PS;
 	const int LOW_BITS = 96;
 
 	const int LOW_RSSI_TIMEOUT = 30 * POLLING_PS;
+	const int LOW_RSSI_E1B_TIMEOUT = 15 * POLLING_PS;
     const float LOW_RSSI = 300*300;
+
+	const int KICK_PLL_RSSI_INTERVAL = 16 * POLLING_PS;
+    const float KICK_PLL_RSSI = 500*500;
 
 	float sumpwr=0;
     holding=0;
@@ -290,9 +419,23 @@ void CHANNEL::Tracking() {
 	evGPS(EC_TRIG3, EV_GPS, ch, "GPS", "trig3 Tracking1");
 	static int firsttime[16];
 	firsttime[ch]=1;
+	nsync = 0;
+	total_bits = 0;
+	expecting_preamble = 0;
+	drop_seq = 0;
+	int seen_data = 0;
+	u4_t t_last_data = 0;
 
-    for (int watchdog=0; watchdog<TIMEOUT; watchdog++) {
-	//evGPS(EC_EVENT, EV_GPS, ch, "GPS", evprintf("TaskSleepMsec(250) ch %d", ch+1));
+    if (isE1B) {
+        //int polys[2] = { 0x4f, -0x6d };       // k=7; Galileo E1B; "-" means G2 inverted
+        int polys[2] = { 0x4f, 0x6d };          // k=7; Galileo E1B
+        set_viterbi27_polynomial_port(polys);
+        nav.fec = create_viterbi27_port(E1B_NBIT);
+    }
+
+    for (int watchdog=0; watchdog < (isE1B? TIMEOUT_E1B:TIMEOUT); watchdog++) {
+    
+	    //evGPS(EC_EVENT, EV_GPS, ch, "GPS", evprintf("TaskSleepMsec(250) ch %d", ch+1));
         TaskSleepUsec(POLLING_US);
         UploadEmbeddedState();
         TaskStat(TSTAT_INCR|TSTAT_ZERO, 0, 0, 0);
@@ -300,8 +443,8 @@ void CHANNEL::Tracking() {
         // Process NAV data
         //for(int avail = RemoteBits(ul.nav_bits) & ~0xF; avail; avail-=16) {
         int avail = RemoteBits(ul.nav_bits) & ~0xF;
-	evGPS(EC_EVENT, EV_GPS, ch, "GPS", evprintf("Tracking ch %d avail %d holding %d W/D %d", ch+1, avail, holding, watchdog/POLLING_PS));
-	evGPS(EC_TRIG3, EV_GPS, ch, "GPS", "trig3 Tracking2");
+        evGPS(EC_EVENT, EV_GPS, ch, "GPS", evprintf("Tracking ch %d avail %d holding %d W/D %d", ch+1, avail, holding, watchdog/POLLING_PS));
+        evGPS(EC_TRIG3, EV_GPS, ch, "GPS", "trig3 Tracking2");
 
 		//if (!firsttime[ch] && avail >= (MAX_NAV_BITS - 16)) {
 		if (avail >= (MAX_NAV_BITS - 16)) {
@@ -318,19 +461,54 @@ void CHANNEL::Tracking() {
             }
             rd_pos+=16;
             rd_pos&=MAX_NAV_BITS-1;
+			bits_tow += 16;
         }
 
-        while (holding>=300) { // Enough for a subframe?
-            int nbits;
-            if (0==ParityCheck(buf, &nbits)) {
+        while (holding >= subframe_bits) {      // Enough for a subframe?
+            int nbits, err;
+            
+            if ((err = ParityCheck(buf, &nbits)) == 0) {
 				watchdog=0; sumpwr=0;
 			} else {
 				if (nbits != 1) GPSstat(STAT_SUB, 0, ch, PARITY);
 			}
 			
 			// ParityCheck() return nbits = 1 to shift buf by 1 bit until a preamble match
+            //printf("ch%02d %s hold %d nbits %d\n", ch+1, PRN(sat), holding, nbits);
+
+            //jks2
+            if (err == 0) {
+                assert(nbits == subframe_bits);
+                expecting_preamble = 1;
+                int tow_pg = Ephemeris[sat].tow_pg;
+                int sub = Ephemeris[sat].sub;
+                LASTsub = sub;
+                int tow = Ephemeris[sat].tow;
+                if (0) printf("%s PRE  TOW %d(%d) %s%d|%d hold %d hold-subframe_bits %d bits_tow %d %.3f %.1f\n",
+                    PRN(sat), tow/6, tow, isE1B? "pg":"sf", sub, tow_pg, holding, holding-subframe_bits, bits_tow, (float) bits_tow/50, (float) bits_tow/subframe_bits);
+                //printf("%s set  lsf%d\n", PRN(sat), LASTsub);
+                if (LASTsub == 1) {
+                    //printf("%s SF1  hold %d\n", PRN(sat), holding);
+                }
+                seen_data = 1;
+                t_last_data = timer_sec();
+            } else {
+                //if (nbits != 1) printf("%s error %d\n", PRN(sat), nbits);
+            }
+            
+            // Not immediately obvious, but crucial that the update of TOW in Ephemeris[] and
+            // decrement of holding occur atomically. Otherwise GetSnapshot() / LoadAtomic()
+            // won't have synchronized information for GetClock().
+            
             memmove(buf, buf+nbits, holding-=nbits);
 			GPSstat(STAT_WDOG, 0, ch, watchdog/POLLING_PS, holding, ul.ca_unlocked);
+			
+			if (ch+1 == gps.kick_lo_pll_ch) {
+			    printf("%s manual-KICK ch%02d LO PLL =========================================================\n",
+			        PRN(sat), ch+1);
+			    Acquisition(false);
+			    gps.kick_lo_pll_ch = 0;
+			}
         }
 
 		Status();
@@ -344,22 +522,39 @@ void CHANNEL::Tracking() {
         
         sumpwr += GetPower();
         float avgpwr = sumpwr/(watchdog+1);
-        if ((watchdog >= LOW_RSSI_TIMEOUT) && (avgpwr <= LOW_RSSI))
+        
+        //if ((watchdog >= LOW_RSSI_TIMEOUT) && isE1B)
+        //    printf("%s LRT %d avgpwr %f LOW_RSSI %f GetPower() %f\n", PRN(sat), watchdog, sqrt(avgpwr), sqrt(LOW_RSSI), sqrt(GetPower()));
+
+        if ((watchdog >= (isE1B? LOW_RSSI_E1B_TIMEOUT : LOW_RSSI_TIMEOUT)) && (avgpwr <= LOW_RSSI))
         	break;
-        if ((watchdog >= LOW_BITS_TIMEOUT) && (holding <= LOW_BITS))
+
+        if ((watchdog >= LOW_BITS_TIMEOUT) && (holding <= LOW_BITS) && !isE1B)
         	break;
+
+        if (!seen_data && avgpwr > KICK_PLL_RSSI && (watchdog % KICK_PLL_RSSI_INTERVAL) == KICK_PLL_RSSI_INTERVAL-1) {
+            printf("%s auto-KICK ch%02d LO PLL wdog %d ================================================\n",
+                PRN(sat), ch+1, watchdog/POLLING_PS);
+            Acquisition(false);
+        }
+        
+        if (timer_sec() - t_last_data > 10) {
+        	GPSstat(STAT_SUB, 0, ch, -1);       // blank if nothing received recently
+        }
     }
+
+    if (isE1B) delete_viterbi27_port(nav.fec);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-void CHANNEL::SignalLost() {
+void CHANNEL::SignalLost(bool restart) {
     // Disable embedded PI controllers
     BusyFlags &= ~(1<<ch);
     spi_set(CmdSetMask, BusyFlags);
 
-    // Re-enable search for this SV
-    SearchEnable(sv);
+    // Re-enable search for this sat
+    SearchEnable(ch, sat, restart);
 
     GPSstat(STAT_POWER, -1, ch); // Flatten bar graph
 }
@@ -379,8 +574,42 @@ int CHANNEL::RemoteBits(uint16_t wr_pos) { // NAV bits held in FPGA circular buf
 
 void CHANNEL::CheckPower() {
     // Running average of received signal power
+    float pi = S32_16_16(ul.iq[0][1], ul.iq[0][0]);
+    float pq = S32_16_16(ul.iq[0][3], ul.iq[0][2]);
+    //if (isE1B) pi /= 4, pq /= 4;
+    float pp = powf(pi, 2) + powf(pq, 2);
+    
+    if (isE1B) pp /= 2;     // half power after sqrt()  FIXME: divide I/Q by 4 instead?
+    //if (isE1B) pp /= 4;     // half power after sqrt()  FIXME: divide I/Q by 4 instead?
+
+    #if 0 && GPS_INTEG_BITS != 16
+        if (ch == gps.IQ_data_ch-1) {
+            int pp_i = sqrtf(pp);
+            int pe_i = sqrt(Get64_frac(ul.iq[1]) * powf(2, 64));    // FIXME: divide I/Q by 4 instead?
+            int pl_i = sqrt(Get64_frac(ul.iq[2]) * powf(2, 64));
+            if (isE1B) pe_i /= 2, pl_i /= 2;
+            //int pe_i = sqrt(powf(Get64_frac(ul.iq[1]), 2) / 4 * powf(2, 64));
+            //int pl_i = sqrt(powf(Get64_frac(ul.iq[2]), 2) / 4 * powf(2, 64));
+            int npe_i = pe_i*100/pp_i;
+            int npl_i = pl_i*100/pp_i;
+            double lo_f = GetFreq(ul.lo_freq) - FC;
+            double ca_f = GetFreq(ul.ca_freq) - CPS;
+            static double last_lo_f, last_ca_f;
+            float lo_e = (lo_f-last_lo_f)/last_lo_f*100.0;
+            float ca_e = (ca_f-last_ca_f)/last_ca_f*100.0;
+            printf("ch%02d %s  LO %8.3f (%6.1f%%) CA %9.6f (%6.1f%%)  EPL %4d %4d %4d | %3d %3d %3d (%3d)",
+                ch+1, PRN(sat),
+                lo_f, lo_e, ca_f, ca_e,
+                pe_i, pp_i, pl_i, npe_i, 100, npl_i, npe_i-npl_i);
+            if (pe_i >= pp_i || pl_i >= pp_i) printf(" UNLOCKED");
+            printf("\n");
+            last_lo_f = lo_f;
+            last_ca_f = ca_f;
+        }
+    #endif
+
     pwr_tot -= pwr[pwr_pos];
-    pwr_tot += pwr[pwr_pos++] = powf(ul.iq[0],2) + powf(ul.iq[1],2);
+    pwr_tot += pwr[pwr_pos++] = pp;
     pwr_pos %= PWR_LEN;
 
     float mean = GetPower();
@@ -391,7 +620,7 @@ void CHANNEL::CheckPower() {
     // AGC hysteresis thresholds
     const float HYST_LO = 1200*1200;
     const float HYST_HI = 1400*1400;
-
+    
     if (GetGainAdj()) {
         if (mean<HYST_LO) SetGainAdj(0); // default
     }
@@ -417,7 +646,7 @@ void CHANNEL::Subframe(char *buf) {
     alert = bin(buf+47,1);
 
 #ifndef	QUIET
-    printf("prn%02d sub %d ", Sats_L1[sv].prn, sub);
+    printf("sat%02d sub %d ", Sats[sat].prn, sub);
     if (sub > 3) printf("page %02d", page);
     printf("\n");
 #endif
@@ -438,8 +667,8 @@ void CHANNEL::Subframe(char *buf) {
         }
         
         if (sub < 1 || sub > SUBFRAMES) {
-            lprintf("GPS: unknown subframe %d prn%02d preamble 0x%02x[0x8b] tlm %d[%d] tow %d[%d] alert/AS %d data-id %d sv-page-id %d novfl %d tracking %d good %d frames %d par_errs %d\n",
-                sub, Sats_L1[sv].prn, bin(buf,8), tlm, last_good_tlm, tow, last_good_tow, bin(buf+47,2), bin(buf+60,2), page, gps.ch[ch].novfl, gps.tracking, gps.good, gps.ch[ch].frames, gps.ch[ch].par_errs);
+            lprintf("GPS: unknown subframe %d prn%02d preamble 0x%02x[0x8b] tlm %d[%d] tow %d[%d] alert/AS %d data-id %d page-id %d novfl %d tracking %d good %d frames %d par_errs %d\n",
+                sub, Sats[sat].prn, bin(buf,8), tlm, last_good_tlm, tow, last_good_tow, bin(buf+47,2), bin(buf+60,2), page, gps.ch[ch].novfl, gps.tracking, gps.good, gps.ch[ch].frames, gps.ch[ch].par_errs);
             for (int i=0; i<10; i++) {
                 lprintf("GPS: w%d b%3d %06x %02x\n", i, i*30, bin(buf+i*30,24), bin(buf+i*30+24,6));
             }
@@ -451,7 +680,7 @@ void CHANNEL::Subframe(char *buf) {
         if (subframe_dump) {
             if (!sub_seen[sub]) {
                 lprintf("GPS: dump #%2d subframe %d page %2d prn%02d novfl %d tracking %d good %d frames %d par_errs %d\n",
-                    subframe_dump, sub, (sub > 3)? page : -1, Sats_L1[sv].prn, gps.ch[ch].novfl, gps.tracking, gps.good, gps.ch[ch].frames, gps.ch[ch].par_errs);
+                    subframe_dump, sub, (sub > 3)? page : -1, Sats[sat].prn, gps.ch[ch].novfl, gps.tracking, gps.good, gps.ch[ch].frames, gps.ch[ch].par_errs);
                 sub_seen[sub] = 1;
                 int prev = (sub == 1)? 5 : (sub-1);
                 sub_seen[prev] = 0;
@@ -477,7 +706,7 @@ void CHANNEL::Status() {
 	GPSstat(STAT_LO, lo_f, ch);
 	GPSstat(STAT_CA, ca_f, ch);
 #ifndef QUIET
-    printf("chan %d PRN %2d rssi %4.0f adj %2d freq %5.6f %6.6f ", ch, Sats_L1[sv].prn, rssi, gain_adj, lo_f, ca_f);
+    printf("chan %d PRN %2d rssi %4.0f adj %2d freq %5.6f %6.6f ", ch, Sats[sat].prn, rssi, gain_adj, lo_f, ca_f);
 #endif
 }
 
@@ -486,28 +715,89 @@ void CHANNEL::Status() {
 int CHANNEL::ParityCheck(char *buf, int *nbits) {
     char p[6];
 
-    // Upright or inverted preamble?  Setting of parity bits resolves phase ambiguity.
-    if      (0==memcmp(buf, preambleUpright, 8)) p[4]=p[5]=0;
-    else if (0==memcmp(buf, preambleInverse, 8)) p[4]=p[5]=1;
-    else return *nbits=1;
+    if (isE1B) {
+        // Upright or inverted preamble?  Resolves phase ambiguity.
+        int inverted;
+        #ifdef TEST_VECTOR
+            inverted = 0;
+        #else
+            if      (memcmp(buf, E1BpreambleUpright, E1B_PRELEN) == 0 &&
+                     memcmp(buf+E1B_TSYM_PP, E1BpreambleUpright, E1B_PRELEN) == 0) inverted = 0;
+            else if (memcmp(buf, E1BpreambleInverse, E1B_PRELEN) == 0 &&
+                     memcmp(buf+E1B_TSYM_PP, E1BpreambleInverse, E1B_PRELEN) == 0) inverted = 1;
+            else return *nbits = 1;
+        #endif
+        
+        if (nsync == 0) total_bits = 0;
+        //printf("ch%02d %s SYNC-%c #%d %d (%d)\n", ch+1, PRN(sat), inverted? 'I':'N',
+        //    nsync++, total_bits, total_bits+subframe_bits);
+        //printf("ch%02d %s SYNC-%c #%d ", ch+1, PRN(sat), inverted? 'I':'N', nsync++);
+        
+        nav.polarity = inverted? -1:1;
+        nav.flen = 500;
+        nav.fbits = buf;
+        nav.tow_updated = 0;
+        int id_or_error = decode_e1b(&nav);
+        if (id_or_error < 0) probation = 2;
+        if (id_or_error == -1) return *nbits = E1B_TSYM_PP;     // need to slip by a page (half a word)
+        if (id_or_error < 0) return *nbits = subframe_bits;     // any other errors (CRC etc)
 
-    // Parity check up to ten 30-bit words ...
-    for (int i=0; i<300; i+=30) {
-        if (parity(p, buf+i, p[4], p[5])) {
-            Status();
-#ifndef QUIET
-            puts("parity");
-#endif
-            probation=2;
-            return *nbits=i+30;
+        if (nav.tow_updated)    // page had TOW so reset bit counter
+            bits_tow = holding - subframe_bits;
+
+        Status();
+        if (id_or_error >= 1 && id_or_error <= 5) GPSstat(STAT_SUB, 0, ch, id_or_error, 0);
+        if (probation) probation--;
+        *nbits = subframe_bits;
+    } else {
+        // Upright or inverted preamble?  Setting of parity bits resolves phase ambiguity.
+        if      (memcmp(buf, L1preambleUpright, L1_PRELEN) == 0) p[4]=p[5]=0;
+        else if (memcmp(buf, L1preambleInverse, L1_PRELEN) == 0) p[4]=p[5]=1;
+        else {
+            if (expecting_preamble) {
+                if (expecting_preamble == 1)
+                    printf("%s EXPECTED PREAMBLE\n", PRN(sat));
+                expecting_preamble++;
+            }
+            return *nbits = 1;
         }
+    
+        //jks2
+        if (gps_debug && Sats[sat].prn == abs(gps_debug) && LASTsub == 3) {
+            printf("%s SF4 seq %d\n", PRN(sat), drop_seq);
+            drop_seq++;
+            LASTsub = 4;
+            if (drop_seq & 1) {
+                printf("%s drop SF4 seq %d\n", PRN(sat), drop_seq);
+                return *nbits = 1;
+            }
+        }
+        
+        expecting_preamble = 0;
+        
+        // Parity check up to ten 30-bit words ...
+        for (int i=0; i<300; i+=30) {
+            if (parity(p, buf+i, p[4], p[5])) {
+                Status();
+    #ifndef QUIET
+                puts("parity");
+    #endif
+                // nullify probation effect from parity error during preamble search
+                // forced by our dropped preamble bit simulation
+                if (!(gps_debug && Sats[sat].prn == abs(gps_debug) && LASTsub == 4))
+                probation=2;
+                return *nbits = i+30;
+            }
+        }
+
+        Status();
+        Subframe(buf);
+        Ephemeris[sat].Subframe(buf);
+        if (probation) probation--;
+        bits_tow = holding - subframe_bits;
+        *nbits = 300;
     }
 
-    Status();
-    Subframe(buf);
-    Ephemeris[sv].Subframe(buf);
-    if (probation) probation--;
-    *nbits=300;
     return 0;
 }
 
@@ -515,25 +805,31 @@ int CHANNEL::ParityCheck(char *buf, int *nbits) {
 
 bool CHANNEL::GetSnapshot(
     uint16_t wr_pos,    // in: circular nav_buf pointer
-    int *p_sv,          // out: Ephemeris[] index
+    int *p_sat,         // out: Ephemeris[] index
     int *p_bits,        // out: total NAV bits held locally + remotely
+    int *p_bits_tow,    // out: bits since last valid TOW
     float *p_pwr) {     // out: signal power for least-squares weighting
+    
+    //jks
+    //if (1) return false;
 
     if (alert && !gps.include_alert_gps) return false; // subframe alert flag
     if (probation) return false; // temporarily too noisy
 
-    *p_sv   = sv;
-    *p_bits = holding + RemoteBits(wr_pos);
+    *p_sat  = sat;
+    int remote = RemoteBits(wr_pos);
+    *p_bits = holding + remote;
+    *p_bits_tow = bits_tow + remote;
     *p_pwr  = GetPower();
 
     return true; // ok to use
 }
 
 bool ChanSnapshot( // called from solver thread
-    int ch, uint16_t wr_pos, int *p_sv, int *p_bits, float *p_pwr) {
+    int ch, uint16_t wr_pos, int *p_sat, int *p_bits, int *p_bits_tow, float *p_pwr) {
 
     if (BusyFlags & (1<<ch))
-        return Chans[ch].GetSnapshot(wr_pos, p_sv, p_bits, p_pwr);
+        return Chans[ch].GetSnapshot(wr_pos, p_sat, p_bits, p_bits_tow, p_pwr);
     else
         return false; // channel not enabled
 }
@@ -557,22 +853,28 @@ void ChanTask(void *param) { // one thread per channel
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-int ChanReset(int sv) { // called from search thread before sampling
+int ChanReset(int sat) { // called from search thread before sampling
 
-    // reuse channel that was processing same sv for benefit of G2 init problem described above
-    for (int ch=0; ch<gps_chans; ch++) {
+    // due to BRAM constraints only some channels are E1B capable
+    int min_ch = is_E1B(sat)? 0 : GALILEO_CHANS;
+    int max_ch = is_E1B(sat)? GALILEO_CHANS : gps_chans;
+    //int max_ch = is_E1B(sat)? GALILEO_CHANS : (GALILEO_CHANS+2);    //jks two gps chans
+    //int max_ch = is_E1B(sat)? 1 : gps_chans;    //jks one E1B chan
+
+    // reuse channel that was processing same sat for benefit of G2 init problem described above
+    for (int ch = min_ch; ch < max_ch; ch++) {
         if (BusyFlags & (1<<ch)) continue;
-        if (Chans[ch].last_sv-1 == sv) {
-            //printf("ChanReset ch%d sv%d REUSE CHANNEL\n", ch, sv);
-            Chans[ch].Reset();
+        if (Chans[ch].last_sat-1 == sat) {
+            //printf("==== ChanReset ch%02d %s REUSE CHANNEL\n", ch+1, PRN(sat));
+            Chans[ch].Reset(sat);
             return ch;
         }
     }
 
-    for (int ch=0; ch<gps_chans; ch++) {
+    for (int ch = min_ch; ch < max_ch; ch++) {
         if (BusyFlags & (1<<ch)) continue;
-        Chans[ch].Reset();
-        Chans[ch].last_sv = sv+1;
+        Chans[ch].Reset(sat);
+        Chans[ch].last_sat = sat+1;
         return ch;
     }
 
@@ -581,13 +883,14 @@ int ChanReset(int sv) { // called from search thread before sampling
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-void ChanStart( // called from search thread to initiate acquisition of detected SV
+void ChanStart( // called from search thread to initiate acquisition of detected sat
     int ch,
-    int sv,
+    int sat,
     int t_sample,
-    int taps,
+    int codegen_init,
     int lo_shift,
-    int ca_shift) {
+    int ca_shift,
+    int snr) {
 
-    Chans[ch].Start(sv, t_sample, taps, lo_shift, ca_shift);
+    Chans[ch].Start(sat, t_sample, codegen_init, lo_shift, ca_shift, snr);
 }

@@ -763,20 +763,21 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		
 		for (i=0; i < gps_chans; i++) {
 			c = &gps.ch[i];
-			int L1_prn = 0, E1B_prn = 0;
+			int prn = -1;
+			char prn_s = 'x';
 			if (c->sat >= 0) {
-			    if (SAT_isL1(c->sat))
-			        L1_prn = SAT_L1(c->sat);
-			    else
-			        E1B_prn = SAT_E1B(c->sat);
+			    prn_s = sat_s[Sats[c->sat].type];
+			    prn = Sats[c->sat].prn;
 			}
-			int un = c->ca_unlocked;
-			asprintf(&sb2, "%s{ \"ch\":%d,\"L1\":%d,\"E1B\":%d,\"snr\":%d,\"rssi\":%d,\"gain\":%d,\"hold\":%d,\"wdog\":%d"
-				",\"unlock\":%d,\"parity\":%d,\"alert\":%d,\"sub\":%d,\"sub_renew\":%d,\"novfl\":%d,\"az\":%d,\"el\":%d}",
-				i? ", ":"", i, L1_prn, E1B_prn, c->snr, c->rssi, c->gain, c->hold, c->wdog,
-				un, c->parity, c->alert, c->sub, c->sub_renew, c->novfl, c->az, c->el);
+			asprintf(&sb2, "%s{\"ch\":%d,\"prn_s\":\"%c\",\"prn\":%d,\"snr\":%d,\"rssi\":%d,\"gain\":%d,\"hold\":%d,\"wdog\":%d"
+				",\"unlock\":%d,\"parity\":%d,\"alert\":%d,\"sub\":%d,\"sub_renew\":%d,\"soln\":%d,\"novfl\":%d,\"az\":%d,\"el\":%d}",
+				i? ", ":"", i, prn_s, prn, c->snr, c->rssi, c->gain, c->hold, c->wdog,
+				c->ca_unlocked, c->parity, c->alert, c->sub, c->sub_renew, c->soln, c->novfl, c->az, c->el);
+//jks2
+//if(i==3)printf("%s\n", sb2);
 			sb = kstr_cat(sb, kstr_wrap(sb2));
 			c->parity = 0;
+			c->soln = 0;
 			for (j = 0; j < SUBFRAMES; j++) {
 				if (c->sub_renew & (1<<j)) {
 					c->sub |= 1<<j;
@@ -785,13 +786,16 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 			}
 		}
 
+        asprintf(&sb2, "],\"soln\":%d", gps.soln);
+		sb = kstr_cat(sb, kstr_wrap(sb2));
+
 		UMS hms(gps.StatSec/60/60);
 		
 		unsigned r = (timer_ms() - gps.start)/1000;
 		if (r >= 3600) {
-			asprintf(&sb2, "],\"run\":\"%d:%02d:%02d\"", r / 3600, (r / 60) % 60, r % 60);
+			asprintf(&sb2, ",\"run\":\"%d:%02d:%02d\"", r / 3600, (r / 60) % 60, r % 60);
 		} else {
-			asprintf(&sb2, "],\"run\":\"%d:%02d\"", (r / 60) % 60, r % 60);
+			asprintf(&sb2, ",\"run\":\"%d:%02d\"", (r / 60) % 60, r % 60);
 		}
 		sb = kstr_cat(sb, kstr_wrap(sb2));
 
@@ -817,16 +821,19 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		sb = kstr_cat(sb, kstr_wrap(sb2));
 
 		if (gps.StatLat) {
-			asprintf(&sb2, ",\"lat\":\"%8.6f %c\"", gps.StatLat, gps.StatNS);
+			//asprintf(&sb2, ",\"lat\":\"%8.6f %c\"", gps.StatLat, gps.StatNS);
+			asprintf(&sb2, ",\"lat\":%.6f", gps.sgnLat);
 			sb = kstr_cat(sb, kstr_wrap(sb2));
-			asprintf(&sb2, ",\"lon\":\"%8.6f %c\"", gps.StatLon, gps.StatEW);
+			//asprintf(&sb2, ",\"lon\":\"%8.6f %c\"", gps.StatLon, gps.StatEW);
+			asprintf(&sb2, ",\"lon\":%.6f", gps.sgnLon);
 			sb = kstr_cat(sb, kstr_wrap(sb2));
 			asprintf(&sb2, ",\"alt\":\"%1.0f m\"", gps.StatAlt);
 			sb = kstr_cat(sb, kstr_wrap(sb2));
 			asprintf(&sb2, ",\"map\":\"<a href='http://wikimapia.org/#lang=en&lat=%8.6f&lon=%8.6f&z=18&m=b' target='_blank'>wikimapia.org</a>\"",
 				gps.sgnLat, gps.sgnLon);
 		} else {
-			asprintf(&sb2, ",\"lat\":null");
+			//asprintf(&sb2, ",\"lat\":null");
+			asprintf(&sb2, ",\"lat\":0");
 		}
 		sb = kstr_cat(sb, kstr_wrap(sb2));
 			
@@ -840,8 +847,14 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		if (gps.IQ_seq_w != gps.IQ_seq_r) {
 		    asprintf(&sb, "{\"ch\":%d,\"IQ\":[", 0);
 		    sb = kstr_wrap(sb);
-            for (j = 0; j < GPS_IQ_SAMPS_W; j++) {
-                asprintf(&sb2, "%s%d", j? ",":"", gps.IQ_data[j]);
+		    s4_t iq;
+            for (j = 0; j < GPS_IQ_SAMPS*NIQ; j++) {
+                #if GPS_INTEG_BITS == 16
+                    iq = S4(S2(gps.IQ_data[j*2+1]));
+                #else
+                    iq = S32_16_16(gps.IQ_data[j*2], gps.IQ_data[j*2+1]);
+                #endif
+                asprintf(&sb2, "%s%d", j? ",":"", iq);
                 sb = kstr_cat(sb, kstr_wrap(sb2));
             }
             sb = kstr_cat(sb, "]}");
@@ -865,28 +878,28 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
         int now = tm.tm_min;
         
         int az, el;
-        int sv_seen[NUM_L1_SATS], prn_seen[NUM_L1_SATS], samp_seen[AZEL_NSAMP];
-        memset(&sv_seen, 0, sizeof(sv_seen));
+        int sat_seen[MAX_SATS], prn_seen[MAX_SATS], samp_seen[AZEL_NSAMP];
+        memset(&sat_seen, 0, sizeof(sat_seen));
         memset(&prn_seen, 0, sizeof(prn_seen));
         memset(&samp_seen, 0, sizeof(samp_seen));
 
-        // sv/prn seen during any sample period
-        for (int sv = 0; sv < NUM_L1_SATS; sv++) {
+        // sat/prn seen during any sample period
+        for (int sat = 0; sat < MAX_SATS; sat++) {
 		    for (int samp = 0; samp < AZEL_NSAMP; samp++) {
-		        if (gps.el[samp][sv] != 0) {
-		            sv_seen[sv] = sv+1;     // +1 bias
-		            prn_seen[sv] = Sats_L1[sv].prn;
+		        if (gps.el[samp][sat] != 0) {
+		            sat_seen[sat] = sat+1;     // +1 bias
+		            prn_seen[sat] = sat+1;     // +1 bias
 		            break;
 		        }
 		    }
 		}
 
-        #if 1
+        #if 0
         if (gps_debug) {
-            // any sv/prn seen during specific sample period
+            // any sat/prn seen during specific sample period
             for (int samp = 0; samp < AZEL_NSAMP; samp++) {
-                for (int sv = 0; sv < NUM_L1_SATS; sv++) {
-                    if (gps.el[samp][sv] != 0) {
+                for (int sat = 0; sat < MAX_SATS; sat++) {
+                    if (gps.el[samp][sat] != 0) {
                         samp_seen[samp] = 1;
                         break;
                     }
@@ -896,15 +909,15 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
             real_printf("-----------------------------------------------------------------------------\n");
             for (int samp = 0; samp < AZEL_NSAMP; samp++) {
                 if (!samp_seen[samp] && samp != now) continue;
-                for (int sv = 0; sv < NUM_L1_SATS; sv++) {
-                    if (!sv_seen[sv]) continue;
-                    real_printf("prn%3d   ", prn_seen[sv]);
+                for (int sat = 0; sat < MAX_SATS; sat++) {
+                    if (!sat_seen[sat]) continue;
+                    real_printf("%s     ", PRN(prn_seen[sat]-1));
                 }
                 real_printf("SAMP %2d %s\n", samp, (samp == now)? "==== NOW ====":"");
-                for (int sv = 0; sv < NUM_L1_SATS; sv++) {
-                    if (!sv_seen[sv]) continue;
-                    az = gps.az[samp][sv];
-                    el = gps.el[samp][sv];
+                for (int sat = 0; sat < MAX_SATS; sat++) {
+                    if (!sat_seen[sat]) continue;
+                    az = gps.az[samp][sat];
+                    el = gps.el[samp][sat];
                     if (az == 0 && el == 0)
                         real_printf("         ");
                     else
@@ -916,22 +929,24 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
         #endif
 
         // send history only for sats seen
-        asprintf(&sb, "{\"n_sats\":%d,\"n_samp\":%d,\"now\":%d,\"sv_seen\":[", NUM_L1_SATS, AZEL_NSAMP, now);
+        asprintf(&sb, "{\"n_sats\":%d,\"n_samp\":%d,\"now\":%d,\"sat_seen\":[", MAX_SATS, AZEL_NSAMP, now);
         sb = kstr_wrap(sb);
 
 		first = 1;
-        for (int sv = 0; sv < NUM_L1_SATS; sv++) {
-            if (!sv_seen[sv]) continue;
-            asprintf(&sb2, "%s%d", first? "":",", sv_seen[sv]-1);   // -1 bias
+        for (int sat = 0; sat < MAX_SATS; sat++) {
+            if (!sat_seen[sat]) continue;
+            asprintf(&sb2, "%s%d", first? "":",", sat_seen[sat]-1);   // -1 bias
             sb = kstr_cat(sb, kstr_wrap(sb2));
             first = 0;
         }
 		
         sb = kstr_cat(sb, "],\"prn_seen\":[");
 		first = 1;
-        for (int sv = 0; sv < NUM_L1_SATS; sv++) {
-            if (!sv_seen[sv]) continue;
-            asprintf(&sb2, "%s%d", first? "":",", prn_seen[sv]);
+        for (int sat = 0; sat < MAX_SATS; sat++) {
+            if (!sat_seen[sat]) continue;
+            char *prn_s = PRN(prn_seen[sat]-1);
+            if (*prn_s == 'N') prn_s++;
+            asprintf(&sb2, "%s\"%s\"", first? "":",", prn_s);
             sb = kstr_cat(sb, kstr_wrap(sb2));
             first = 0;
         }
@@ -939,9 +954,9 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
         sb = kstr_cat(sb, "],\"az\":[");
 		first = 1;
 		for (int samp = 0; samp < AZEL_NSAMP; samp++) {
-            for (int sv = 0; sv < NUM_L1_SATS; sv++) {
-                if (!sv_seen[sv]) continue;
-                asprintf(&sb2, "%s%d", first? "":",", gps.az[samp][sv]);
+            for (int sat = 0; sat < MAX_SATS; sat++) {
+                if (!sat_seen[sat]) continue;
+                asprintf(&sb2, "%s%d", first? "":",", gps.az[samp][sat]);
                 sb = kstr_cat(sb, kstr_wrap(sb2));
                 first = 0;
             }
@@ -950,9 +965,9 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
         sb = kstr_cat(sb, "],\"el\":[");
 		first = 1;
 		for (int samp = 0; samp < AZEL_NSAMP; samp++) {
-            for (int sv = 0; sv < NUM_L1_SATS; sv++) {
-                if (!sv_seen[sv]) continue;
-                asprintf(&sb2, "%s%d", first? "":",", gps.el[samp][sv]);
+            for (int sat = 0; sat < MAX_SATS; sat++) {
+                if (!sat_seen[sat]) continue;
+                asprintf(&sb2, "%s%d", first? "":",", gps.el[samp][sat]);
                 sb = kstr_cat(sb, kstr_wrap(sb2));
                 first = 0;
             }
@@ -981,7 +996,30 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		}
 
 	    gps.IQ_data_ch = j;
-	    //printf("gps_IQ_data_ch=%d\n", gps.IQ_data_ch);
+		return true;
+	}
+
+	n = sscanf(cmd, "SET gps_kick_pll_ch=%d", &j);
+	if (n == 1) {
+		if (conn->auth_admin == false) {
+			cprintf(conn, "SET gps_kick_pll_ch: NO ADMIN AUTH %s\n", conn->remote_ip);
+			return true;
+		}
+
+	    gps.kick_lo_pll_ch = j+1;
+	    printf("gps_kick_pll_ch=%d\n", gps.kick_lo_pll_ch);
+		return true;
+	}
+
+	n = sscanf(cmd, "SET gps_gain=%d", &j);
+	if (n == 1) {
+		if (conn->auth_admin == false) {
+			cprintf(conn, "SET gps_gain: NO ADMIN AUTH %s\n", conn->remote_ip);
+			return true;
+		}
+
+	    gps.gps_gain = j;
+	    printf("gps_gain=%d\n", gps.gps_gain);
 		return true;
 	}
 

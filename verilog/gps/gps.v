@@ -95,7 +95,7 @@ module GPS (
         if      (ser_load[GET_SRQ]) srq_shift <= srq_noted & srq_mask;
         else if (ser_next[GET_SRQ]) srq_shift <= srq_shift << 1;	// one shift each rdBit
 
-    assign ser_data[GET_SRQ] = srq_shift[NSRQ];	// always MSB, so that's why shift is used
+    assign ser_data[GET_SRQ] = srq_shift[NSRQ];	// always uses MSB, so that's why shift is used above
 
     //////////////////////////////////////////////////////////////////////////
     // 48-bit high-resolution system clock (49 day overflow)
@@ -113,19 +113,22 @@ module GPS (
     //////////////////////////////////////////////////////////////////////////
     // Read clock replica snapshots
 
-	// i.e. { ticks[47:0], srq[GPS_CHANS-1:0], {GPS_CHANS {clock_replica[15:0]}} }
+	// i.e. { ticks[47:0], srq[GPS_CHANS-1:0], {GPS_CHANS {clock_replica[GPS_REPL_BITS-1:0]}} }
 
-    reg  [48+GPS_CHANS*17-1:0] snapshot;
-    wire [48+GPS_CHANS*17-1:0] replicas;
+    localparam ALL_REPLICA_BITS = GPS_CHANS * GPS_REPL_BITS;
+    localparam GPS_MSB = GPS_CHANS /* srq */ + ALL_REPLICA_BITS - 1;
+    
+    reg  [48+GPS_MSB:0] snapshot;
+    wire [48+GPS_MSB:0] replicas;
 
-    assign replicas[GPS_CHANS*17-1 -:GPS_CHANS] = chan_srq | srq_noted[GPS_CHANS-1:0]; // Unserviced epochs
-    assign replicas[48+GPS_CHANS*17-1 -:48] = ticks;
+    assign replicas[GPS_MSB -:GPS_CHANS] = chan_srq | srq_noted[GPS_CHANS-1:0]; // Unserviced epochs
+    assign replicas[48+GPS_MSB -:48] = ticks;
 
     always @ (posedge clk)
         if      (ser_load[GET_SNAPSHOT]) snapshot <= replicas;
         else if (ser_next[GET_SNAPSHOT]) snapshot <= snapshot << 1;
 
-    assign ser_data[GET_SNAPSHOT] = snapshot[48+GPS_CHANS*17-1];
+    assign ser_data[GET_SNAPSHOT] = snapshot[48+GPS_MSB];    // always uses MSB, so that's why shift is used above
 
     //////////////////////////////////////////////////////////////////////////
     // Sampling
@@ -166,19 +169,20 @@ module GPS (
 `endif
 
     //////////////////////////////////////////////////////////////////////////
-    // Pause code generator (to align with SV)
+    // Pause code generator (to align with sat)
 
-    reg  [13:0] ca_cnt;
-    wire [13:0] ca_nxt;
-    wire        ca_resume;
+    // must fit (FS_I/1000 * code_period_ms)-1
+    reg  [15:0] cg_cnt;
+    wire [15:0] cg_nxt;
+    wire        cg_resume;
 
     always @ (posedge clk)
         if (wrReg && op[SET_PAUSE])
-            ca_cnt <= tos[13:0];
+            cg_cnt <= tos[15:0];
         else
-            ca_cnt <= ca_nxt;
+            cg_cnt <= cg_nxt;
 
-    assign {ca_resume, ca_nxt} = ca_cnt - 1'b1;
+    assign {cg_resume, cg_nxt} = cg_cnt - 1'b1;
 
     //////////////////////////////////////////////////////////////////////////
     // Demodulators
@@ -187,25 +191,59 @@ module GPS (
     wire [GPS_CHANS-1:0] chan_sout;
 
     always @* begin
+
+        // Upon sampler reset, reset code generators of all free channels.
+        // This idea is very important. When the acquisition process determines the code phase
+        // it is relative to the point at which the code generator was reset, namely here at the
+        // beginning of the sampling process (chan_rst below is derived directly from sampler_rst).
+        
         chan_rst = {GPS_CHANS{sampler_rst}} & ~chan_mask;
         chan_wrReg = 0;
         chan_shift = 0;
         chan_wrReg[cmd_chan] = wrReg;
         chan_shift[cmd_chan] = ser_next[GET_CHAN_IQ];
     end
+    
+    wire [GPS_CHANS-1:0] e1b_code;
+    wire [(GPS_CHANS * E1B_CODEBITS)-1:0] nchip;
+    
+    // because we're out of BRAMs, GALILEO_CHANS < GPS_CHANS until we can do some BRAM optimization
+
+    genvar ch;
+    generate
+        for (ch=0; ch < GPS_CHANS; ch = ch+1)
+        begin : e1b_chans
+            if (ch < GALILEO_CHANS)
+            begin
+                E1BCODE e1b (.rst(chan_rst[ch]), .clk(clk), .wrReg(chan_wrReg[ch]), .op(op), .tos(tos), .nchip(nchip[(ch*E1B_CODEBITS) +:E1B_CODEBITS]), .code(e1b_code[ch]));
+            end
+            if (ch >= GALILEO_CHANS)
+            begin
+                assign e1b_code[ch] = 0;
+            end
+        end
+    endgenerate
+    
+    // Tried putting the E1BCODE inside the DEMOD. But placing the needed generate around the
+    // DEMOD (for the limited number of E1BCODEs vs total DEMODs) broke the bit vector expansion
+    // and gave errors we didn't undestand.
 
     DEMOD demod [GPS_CHANS-1:0] (
         .clk            (clk),
         .rst            (chan_rst),
         .sample         (sample),
-        .ca_resume      (ca_resume),
+        .cg_resume      (cg_resume),
         .wrReg          (chan_wrReg),
         .op             (op),
         .tos            (tos),
+
+        .nchip          (nchip),
+        .e1b_code       (e1b_code),
+
         .shift          (chan_shift),
         .sout           (chan_sout),
         .ms0            (chan_srq),
-        .replica        (replicas[GPS_CHANS*16-1:0])
+        .replica        (replicas[ALL_REPLICA_BITS-1:0])
     );
 
     assign ser_data[GET_CHAN_IQ] = chan_sout[cmd_chan];

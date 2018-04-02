@@ -18,38 +18,43 @@
 // http://www.holmea.demon.co.uk/GPS/Main.htm
 //////////////////////////////////////////////////////////////////////////
 
+`include "kiwi.vh"
+
 `default_nettype none
 
-// 64K bit buffer and serial-write to 16-bit parallel-read converter
-// uses 4 BRAM16s
+// 4k bit buffer and 16-bit parallel-write to serial-read converter
+// uses 1/4 BRAM16
 
-module SAMPLER (
-    input  wire clk,
+module E1BCODE (
     input  wire rst,
-    input  wire din,
-    input  wire rd,
-    output wire [15:0] dout);
-        
-    reg [15:0] addra;
-    reg [11:0] addrb;
-    reg        full;
-    
-    wire [3:0] slice = 1'b1 << addra[3:2];
+    input  wire clk,
 
-    ipcore_bram_gps_16k_1b_4k_4b sampler_ram [3:0] (
-        .clka   (clk),								.clkb   (clk),
-        .addra  ({ 4{addra[15:4], addra[1:0]} }),	.addrb  (addrb + rd),
-        .dina	(din),								.doutb	(dout),
-        .ena    (slice),
-        .wea    (~full)
-    );
+    input  wire wrReg,
+    input  wire [15:0] op,
+    input  wire [31:0] tos,
+
+    input  wire [E1B_CODEBITS-1:0] nchip,
+    output wire code
+);
+
+    wire wr = wrReg && op[SET_E1B_CODE];
+
+    reg [7:0] waddr;    // 4k/16 = 256
+	reg [E1B_CODEBITS-1:0] raddr;
 
     always @ (posedge clk)
         if (rst)
-            {addra, addrb, full} <= 0;
+            waddr <= 0;
         else begin
-            if (~full) {full, addra} <= addra + 1;
-            addrb <= addrb + rd;
-         end
-         
+            waddr <= waddr + wr;
+            raddr <= (nchip == (E1B_CODELEN-1))? 0 : (nchip+1);     // BRAM read delay
+        end
+
+	ipcore_bram_256_16b_4k_1b e1b_code (
+		.clka	(clk),          .clkb	(clk),
+		.addra	(waddr),        .addrb	(raddr),
+		.dina	(tos[15:0]),    .doutb	(code),
+		.wea	(wr)
+	);
+	
 endmodule
