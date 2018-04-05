@@ -603,7 +603,8 @@ verilog: $(GEN_VERILOG)
 EXCLUDE_CV = ".DS_Store" "rx/cic_gen" "rx/*.dSYM"
 cv: $(GEN_VERILOG)
 	rsync -av --delete $(addprefix --exclude , $(EXCLUDE_CV)) verilog/ $(V_DIR)/KiwiSDR
-	rsync -av --delete $(addprefix --exclude , $(EXCLUDE_CV)) verilog.ip/ $(V_DIR)/KiwiSDR.ip
+	rsync -av --delete $(addprefix --exclude , $(EXCLUDE_CV)) verilog.Vivado.2014.4.ip/ $(V_DIR)/KiwiSDR.Vivado.2014.4.ip
+	rsync -av --delete $(addprefix --exclude , $(EXCLUDE_CV)) verilog.Vivado.2017.4.ip/ $(V_DIR)/KiwiSDR.Vivado.2017.4.ip
 
 cv2:
 	@echo "you probably want to use \"make cv\" here"

@@ -1,7 +1,6 @@
-Configuration of Vivado BRAM, adder/accumulator and DDS IP blocks
+Configuration of Vivado 2014.4 BRAM, adder/accumulator and DDS IP blocks
 necessary to build the Kiwi Verilog code.
-    Tested using Vivado 2014.4
-    Updated 1-Jun-2017
+    Updated 6 Apr 2018
 
 In Vivado:
     In the Project Manager > Sources window select the "IP Sources" tab at the bottom.
