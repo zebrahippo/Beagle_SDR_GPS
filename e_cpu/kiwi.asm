@@ -465,6 +465,7 @@ Commands:
 				u16		CmdSetGainLO
 				u16		CmdSetSat
 				u16     CmdSetE1Bcode
+				u16     CmdSetPolarity
 				u16		CmdPause
 				u16		CmdGetGPSSamples
 				u16		CmdGetChan
@@ -472,35 +473,7 @@ Commands:
 				u16		CmdGetGlitches
 				u16		CmdIQLogReset
 				u16		CmdIQLogGet
-				u16     CmdTestMult18
 #endif
-
-// FIXME remove
-CmdTestMult18:
-#if 0
-                rdReg	HOST_RX                 ; 16'b0|xa[15:0]
-                RdReg32 HOST_RX                 ; 16'b0|xa[15:0] xb[31:0]
-#else
-                // 0xf ff85 * 0xf 01c8 = 0x0 db18 (-123 * -456 = 56088)
-                //push32  0xf 0xff85
-                //push32  0x0 0x01c8
-
-                // 0xf ff85 * 0xf ffff = 0x0 007b (-123 * -1 = 123)
-                push32  0xf 0xff85
-                push32  0xf 0xffff
-#endif
-                mult18                          ; sext([35:32]) [31:16]|[15:0]
-                wrEvt	HOST_RST
-                dup                             ; sext([35:32]) [31:16]|[15:0] [31:16]|[15:0]
-                wrReg	HOST_TX                 ; sext([35:32]) [31:16]|[15:0]
-                swap16                          ; sext([35:32]) [15:0]|[31:16]
-                wrReg	HOST_TX                 ; sext([35:32])
-                dup                             ; sext([35:32]) sext([35:32])
-                                                ; sext([35:32]) = 16'[35]|12'[35],[35:32]
-                wrReg	HOST_TX                 ; 16'[35]|12'[35],[35:32]
-                swap16                          ; 12'[35],[35:32]|16'[35]
-                wrReg	HOST_TX                 ;
-                ret
 
 
 ; ============================================================================
@@ -609,6 +582,12 @@ neg32:			push	0					; i32 0
 				swap						; 0 i32
 				sub.r						; -i32
 
+neg64:			push	0					; i64H L 0
+                push	0					; i64H L 0 0
+                swap64                      ; 0 0 i64H L
+				sub64						; -i64H L
+				ret
+
 conv32_64:                                  ; i32                           9
 				push	0					; i32 0
 				over						; i32 0 i32
@@ -676,6 +655,13 @@ abs32:
 				neg32						; -i32
 abs32_1:		ret
 
+abs64:
+				dup64                       ; i64H L i64H L
+				sgn64_16					; i64H L i64<0?
+				brZ		abs64_1				; i64H L
+				neg64						; -i64H L
+abs64_1:		ret
+
 // rdBit a 16-bit word
 rdBit16:
 				push	0
@@ -685,6 +671,7 @@ rdBit16z:
 				ENDR
 				ret
 
+// increment a u16 memory location
 incr16:										; addr
 				dup							; addr addr
 				fetch16						; addr data
