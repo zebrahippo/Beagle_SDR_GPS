@@ -155,7 +155,6 @@ static void led_num(int n, int ndigits, int flags)
 
 static void led_reporter(void *param)
 {
-
     bool error;
     u4_t a, b, c, d;
     inet4_d2h(ddns.ip_pvt, &error, &a, &b, &c, &d);
@@ -182,7 +181,7 @@ static void led_reporter(void *param)
 
 void led_task(void *param)
 {
-    int status = child_task("kiwi.led", 0, led_reporter, NULL);
+    int status = child_task("kiwi.led", NO_WAIT, led_reporter, NULL);
     int exit_status;
     if (WIFEXITED(status) && (exit_status = WEXITSTATUS(status))) {
         printf("led_reporter exit_status=0x%x\n", exit_status);

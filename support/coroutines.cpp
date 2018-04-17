@@ -183,6 +183,34 @@ static u4_t task_all_hist[N_HIST];
 static int itask_tid;
 static u64_t itask_last_tstart;
 
+static char *task_s(TASK *tp)
+{
+    if (tp->lock.wait != NULL || tp->lock.hold != NULL)
+        return stprintf("%s:P%d:T%02d|K%d", tp->name? tp->name:"?", tp->priority, tp->id, tp->lock.token);
+    else
+        return stprintf("%s:P%d:T%02d", tp->name? tp->name:"?", tp->priority, tp->id);
+}
+
+char *Task_s(int id)
+{
+    TASK *t = Tasks + id;
+    return task_s(t);
+}
+
+static char *task_ls(TASK *tp)
+{
+    if (tp->lock.wait != NULL || tp->lock.hold != NULL)
+        return stprintf("%s:P%d:T%02d(%s)|K%d", tp->name? tp->name:"?", tp->priority, tp->id, tp->where? tp->where : "-", tp->lock.token);
+    else
+        return stprintf("%s:P%d:T%02d(%s)", tp->name? tp->name:"?", tp->priority, tp->id, tp->where? tp->where : "-");
+}
+
+char *Task_ls(int id)
+{
+    TASK *t = Tasks + id;
+    return task_ls(t);
+}
+
 //#define USE_RUNNABLE
 
 void runnable(TaskQ_t *tq, int chg)
@@ -239,25 +267,16 @@ static void TdeQ(TASK *t)
 	if (next) next->prev = prev;
 	prev->next = next;
 	t->tll.next = t->tll.prev = NULL;
+	
+	if (&t->tll == tq->last_run) {
+	    //lprintf("### TdeQ: removing %s as last run on TaskQ\n", task_s(t));
+	    tq->last_run = NULL;
+	} else {
+	    //lprintf("### TdeQ: NOT removing %s as last run on TaskQ\n", task_s(t));
+	}
 
 	if (!t->stopped) runnable(tq, -1);
 	tq->count--;
-}
-
-static char *task_s(TASK *tp)
-{
-    if (tp->lock.wait != NULL || tp->lock.hold != NULL)
-        return stprintf("%s:P%d:T%02d|K%d", tp->name, tp->priority, tp->id, tp->lock.token);
-    else
-        return stprintf("%s:P%d:T%02d", tp->name, tp->priority, tp->id);
-}
-
-static char *task_ls(TASK *tp)
-{
-    if (tp->lock.wait != NULL || tp->lock.hold != NULL)
-        return stprintf("%s:P%d:T%02d(%s)|K%d", tp->name, tp->priority, tp->id, tp->where? tp->where : "-", tp->lock.token);
-    else
-        return stprintf("%s:P%d:T%02d(%s)", tp->name, tp->priority, tp->id, tp->where? tp->where : "-");
 }
 
 // Print per-task accumulated usec runtime since last dump.
@@ -726,6 +745,9 @@ void TaskRemove(int id)
     run[t->id].v = 0;
     t->ctx->init = FALSE;
     collect_needed = TRUE;
+    
+    if (t->flags & CTF_TNAME_FREE)
+        free((void *) t->name);
 
     if (t->lock.hold) {
     	lprintf("TaskRemove: %s holding lock \"%s\"!\n", task_ls(t), t->lock.hold->name);
@@ -767,8 +789,17 @@ bool TaskIsChild()
 	return (our_pid != kiwi_server_pid);
 }
 
+// doesn't work as expected
+//#define LOCK_TEST_HANG
+#ifdef LOCK_TEST_HANG
+    static int lock_test_hang;
+#endif
+
 #define LOCK_CHECK_HANG
 #ifdef LOCK_CHECK_HANG
+    static bool lock_panic;
+#endif
+#if defined(LOCK_CHECK_HANG) && defined(EV_MEAS_LOCK)
     static int expecting_spi_lock_next_task;
 #endif
 
@@ -780,17 +811,6 @@ bool TaskIsChild()
 {
     if (!task_package_init) return;
     
-    #ifdef LOCK_CHECK_HANG
-        static bool lock_panic;
-        if (expecting_spi_lock_next_task) {
-            expecting_spi_lock_next_task--;
-            if (expecting_spi_lock_next_task == 0) {
-                printf("expecting_spi_lock_next_task !!!!\n");
-                lock_panic = true;
-            }
-        }
-    #endif
-
 	int i;
     TASK *t, *tn, *ct;
     u64_t now_us, enter_us = timer_us64();
@@ -800,6 +820,17 @@ bool TaskIsChild()
     quanta = enter_us - ct->tstart_us;
     ct->usec += quanta;
     
+    #if defined(LOCK_CHECK_HANG) && defined(EV_MEAS_LOCK)
+        if (expecting_spi_lock_next_task && ct->minrun == 0) {
+            expecting_spi_lock_next_task--;
+            evLock(EC_EVENT, EV_NEXTTASK, -1, "next_task", evprintf("dec expecting_spi_lock_next_task=%d", expecting_spi_lock_next_task));
+            if (expecting_spi_lock_next_task == 0) {
+                lprintf("expecting_spi_lock_next_task !!!!\n");
+                lock_panic = true;
+            }
+        }
+    #endif
+
 	if (ct->flags & CTF_NO_CHARGE) {     // don't charge the current task
         ct->flags &= ~CTF_NO_CHARGE;
     } else {
@@ -867,6 +898,8 @@ bool TaskIsChild()
     TaskQ_t *head;
 	evNT(EC_EVENT, EV_NEXTTASK, -1, "NextTask", "looking for task to run ...");
 
+    // mark ourselves as "last run" on our task queue if we're still valid
+	assert(ct->tq == &TaskQ[ct->priority]);
 	ct->tq->last_run = ct->valid? &ct->tll : NULL;
 
     do {
@@ -916,6 +949,7 @@ bool TaskIsChild()
    		 // search task queues
 		for (p = HIGHEST_PRIORITY; p >= LOWEST_PRIORITY; p--) {
 			head = &TaskQ[p];
+			assert(p == head->p);
 			
 			#ifdef USE_RUNNABLE
 				int runnable = head->runnable;
@@ -926,22 +960,40 @@ bool TaskIsChild()
 			#else
 				int runnable = 0;
 				TaskLL_t *tll;
+				
+                #ifdef LOCK_TEST_HANG
+                    if (lock_test_hang && p == DATAPUMP_PRIORITY) {
+                        printf("LOCK_TEST_HANG ignoring DATAPUMP_PRIORITY\n");
+                        continue;
+                    }
+                #endif
+                
+                #ifdef LOCK_CHECK_HANG
+                    if (lock_panic && head->last_run) lprintf("P%d: last_run %s\n", p, task_s(head->last_run->t));
+                #endif
+					
+				// count the number runnable
 				for (tll = head->tll.next; tll; tll = tll->next) {
 					assert(tll);
 					TASK *t = tll->t;
 					assert(t);
 					assert(t->valid);
+					
+                    #ifdef LOCK_CHECK_HANG
+				        if (lock_panic) lprintf("P%d: %s\n", p, task_s(t));
+                    #endif
+					
 					if (!t->stopped)
 						runnable++;
 					
 					#ifdef LOCK_CHECK_HANG
                         if (lock_panic && t == busy_helper_task)
-                            printf("P%d busy_helper_task stopped %d lock.wait %d\n", p, t->stopped, t->lock.wait);
+                            lprintf("P%d: busy_helper_task stopped %d lock.wait %d\n", p, t->stopped, t->lock.wait);
                     #endif
 				}
 
                 #ifdef LOCK_CHECK_HANG
-				    if (lock_panic) printf("P%d runnable %d\n", p, runnable);
+				    if (lock_panic) lprintf("P%d: runnable %d\n", p, runnable);
 				#endif
 			#endif
 
@@ -954,8 +1006,12 @@ bool TaskIsChild()
 			if (runnable) {
 				// at this point the p/head queue should have at least one runnable task
 				TaskLL_t *wrap = (head->last_run && head->last_run->next)? head->last_run->next : head->tll.next;
+	            assert(wrap->t->priority == p);
+	            
+	            // start with the one after the last run (round robin) or, failing that, the first one in the queue
 				TaskLL_t *tll = wrap;
 				
+				int looping = 0;
 				do {
 					assert(tll);
 					t = tll->t;
@@ -1011,7 +1067,13 @@ bool TaskIsChild()
 					t = NULL;
 					tll = tll->next;
 					if (tll == NULL) tll = head->tll.next;
+					
+					if (++looping == 100)
+					    break;
 				} while (tll != wrap);
+				
+				if (looping == 100)
+				    panic("NextTask looping");
 				
 				if (t) {
 					assert(t->valid);
@@ -1233,12 +1295,20 @@ u4_t TaskID()
 	return cur_task->id;
 }
 
-const char *_TaskName(const char *name)
+const char *_TaskName(const char *name, bool free_name)
 {
-	if (!cur_task) return "main";
-	if (name != NULL)
-		cur_task->name = name;
-	return cur_task->name;
+    TASK *ct = cur_task;
+    
+	if (!ct) return "main";
+	if (name != NULL) {
+        if (ct->flags & CTF_TNAME_FREE) {
+            free((void *) ct->name);
+            ct->flags &= ~CTF_TNAME_FREE;
+        }
+		ct->name = name;
+		if (free_name) ct->flags |= CTF_TNAME_FREE;
+	}
+	return ct->name;
 }
 
 void TaskParams(u4_t minrun_us)
@@ -1508,6 +1578,8 @@ void lock_enter(lock_t *lock)
 		    assert(ow->lock.hold == lock);
 		    // priority inversion: temp raise priority of lock owner to our priority
 		    ow->saved_priority = ow->priority;
+		    //printf("### LOCK_PRIORITY_INVERSION raising owner %s ...\n", task_s(ow));
+		    //printf("### LOCK_PRIORITY_INVERSION ... to match ct %s\n", task_s(ct));
 		    TdeQ(ow);
 		    TenQ(ow, ct->priority);
 		    ow->flags |= CTF_PRIO_INVERSION;
@@ -1529,12 +1601,16 @@ void lock_enter(lock_t *lock)
     }
     
     assert(token == lock->leave);	// check that we really own lock
-
+    
     lock->owner = ct;
 	ct->lock.wait = NULL;
     ct->lock.hold = lock;
-    #ifdef LOCK_CHECK_HANG
-        if (lock == &spi_lock) expecting_spi_lock_next_task = 0;
+
+    #if defined(LOCK_CHECK_HANG) && defined(EV_MEAS_LOCK)
+        if (lock == &spi_lock) {
+            expecting_spi_lock_next_task = 0;
+            evLock2(EC_EVENT, EV_NEXTTASK, -1, "lock_enter", evprintf("set expecting_spi_lock_next_task=0, %s", task_s(ct)));
+        }
     #endif
 
     evLock2(EC_EVENT, EV_NEXTTASK, -1, "lock_enter", evprintf("ACQUIRE %s %s L%d|%d|E%d",
@@ -1644,8 +1720,24 @@ void lock_leave(lock_t *lock)
         lock->timer_since_no_owner = 0;
     } else {
         lock->timer_since_no_owner = timer_sec();
-        #ifdef LOCK_CHECK_HANG
-            if (lock == &spi_lock) expecting_spi_lock_next_task = 50;
+
+        #if defined(LOCK_CHECK_HANG) && defined(EV_MEAS_LOCK)
+            if (lock == &spi_lock) {
+                expecting_spi_lock_next_task = 50;
+                evLock2(EC_EVENT, EV_NEXTTASK, -1, "lock_leave", evprintf("set expecting_spi_lock_next_task=50, %s %d waiters", task_s(ct), n_waiters));
+            }
+        #endif
+
+        #ifdef LOCK_TEST_HANG
+            static int lock_test_hang_ct;
+            if (lock == &spi_lock) {
+                lock_test_hang_ct++;
+                if (lock_test_hang_ct <= 20) printf("lock_test_hang_ct %d\n", lock_test_hang_ct);
+                if (lock_test_hang_ct == 20) {
+                    printf("**** LOCK_TEST_HANG ****\n");
+                    lock_test_hang = 1;
+                }
+            }
         #endif
     }
     
