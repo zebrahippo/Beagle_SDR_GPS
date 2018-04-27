@@ -25,7 +25,6 @@ Boston, MA  02110-1301, USA.
 #include "timer.h"
 #include "web.h"
 #include "peri.h"
-#include "spi.h"
 #include "cfg.h"
 #include "dx.h"
 #include "coroutines.h"

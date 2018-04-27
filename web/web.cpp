@@ -39,6 +39,7 @@ Boston, MA  02110-1301, USA.
 #include "rx.h"
 #include "clk.h"
 #include "spi.h"
+#include "ext_int.h"
 
 // This file is compiled twice into two different object files:
 // Once with EDATA_EMBED defined when installed as the production server in /usr/local/bin
@@ -244,9 +245,9 @@ static const char* edata(const char *uri, bool cache_check, size_t *size, u4_t *
 	return data;
 }
 
-struct iparams_t {
+typedef struct {
 	char *id, *encoded, *decoded;
-};
+} iparams_t;
 
 #define	N_IPARAMS	256
 static iparams_t iparams[N_IPARAMS];

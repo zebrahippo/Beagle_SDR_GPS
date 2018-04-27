@@ -49,7 +49,7 @@ char *rx_server_ajax(struct mg_connection *mc)
 {
 	int i, j, n;
 	char *sb, *sb2;
-	stream_t *st;
+	rx_stream_t *st;
 	char *uri = (char *) mc->uri;
 	
 	if (*uri == '/') uri++;

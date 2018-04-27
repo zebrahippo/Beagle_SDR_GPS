@@ -26,7 +26,7 @@ Boston, MA  02110-1301, USA.
 
 // configuration
 
-struct cfg_t {
+typedef struct {
 	bool init, init_load;
 	lock_t lock;    // FIXME: now that parsing the dx list is yielding probably need to lock
 	const char *filename;
@@ -36,7 +36,7 @@ struct cfg_t {
 
 	int tok_size, ntok;
 	jsmntok_t *tokens;
-};
+} cfg_t;
 
 extern cfg_t cfg_cfg, cfg_adm, cfg_dx;
 
@@ -185,7 +185,7 @@ int _cfg_set_object(cfg_t *cfg, const char *name, const char *val, u4_t flags, i
 char *_cfg_get_json(cfg_t *cfg, int *size);
 char *_cfg_realloc_json(cfg_t *cfg, int size, u4_t flags);
 
-void cfg_print_tok(cfg_t *cfg, void *param, jsmntok_t *jt, int seq, int hit, int lvl, int rem);
+bool cfg_print_tok(cfg_t *cfg, void *param, jsmntok_t *jt, int seq, int hit, int lvl, int rem, void **rval);
 typedef bool (*cfg_walk_cb_t)(cfg_t *cfg, void *param, jsmntok_t *jt, int seq, int hit, int lvl, int rem, void **rval);
 void *_cfg_walk(cfg_t *cfg, const char *id, cfg_walk_cb_t cb, void *param);
 
@@ -194,5 +194,5 @@ bool _cfg_float_json(cfg_t *cfg, jsmntok_t *jt, double *num);
 bool _cfg_type_json(cfg_t *cfg, jsmntype_t jt_type, jsmntok_t *jt, const char **str);
 void _cfg_free(cfg_t *cfg, const char *str);
 
-enum cfg_lookup_e { CFG_OPT_NONE, CFG_OPT_ID1, CFG_OPT_ID2, CFG_OPT_NO_DOT };
+typedef enum { CFG_OPT_NONE, CFG_OPT_ID1, CFG_OPT_ID2, CFG_OPT_NO_DOT } cfg_lookup_e;
 jsmntok_t *_cfg_lookup_json(cfg_t *cfg, const char *id, cfg_lookup_e option);

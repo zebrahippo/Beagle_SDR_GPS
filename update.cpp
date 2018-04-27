@@ -27,6 +27,7 @@ Boston, MA  02110-1301, USA.
 #include "cfg.h"
 #include "coroutines.h"
 #include "net.h"
+#include "rx.h"
 
 #include <types.h>
 #include <unistd.h>

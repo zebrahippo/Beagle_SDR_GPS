@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Peter Jennings, VE3SUN
+// Copyright (c) 2017 John Seamons, ZL/KF6VO
 
 #include "ext.h"	// all calls to the extension interface begin with "ext_", e.g. ext_register()
 
@@ -10,18 +10,18 @@
 #include <math.h>
 #include <strings.h>
 
-struct ibp_scan_t {
+typedef struct {
 	int rx_chan;
-};
+} timecode_t;
 
-static ibp_scan_t ibp_scan[RX_CHANS];
+static timecode_t timecode[RX_CHANS];
 
-bool ibp_scan_msgs(char *msg, int rx_chan)
+bool timecode_msgs(char *msg, int rx_chan)
 {
-	ibp_scan_t *e = &ibp_scan[rx_chan];
+	timecode_t *e = &timecode[rx_chan];
 	int n;
 	
-	//printf("### ibp_scan_msgs RX%d <%s>\n", rx_chan, msg);
+	printf("### timecode_msgs RX%d <%s>\n", rx_chan, msg);
 	
 	if (strcmp(msg, "SET ext_server_init") == 0) {
 		e->rx_chan = rx_chan;	// remember our receiver channel number
@@ -32,16 +32,17 @@ bool ibp_scan_msgs(char *msg, int rx_chan)
 	return false;
 }
 
-void IBP_scan_main();
+void timecode_main();
 
-ext_t ibp_scan_ext = {
-	"IBP_scan",
-	IBP_scan_main,
+ext_t timecode_ext = {
+	"timecode",
+	timecode_main,
 	NULL,
-	ibp_scan_msgs,
+	timecode_msgs,
+	{ "wwvb.js", "tdf.js", NULL }
 };
 
-void IBP_scan_main()
+void timecode_main()
 {
-	ext_register(&ibp_scan_ext);
+	ext_register(&timecode_ext);
 }

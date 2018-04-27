@@ -20,6 +20,7 @@ Boston, MA  02110-1301, USA.
 #include "types.h"
 #include "config.h"
 #include "kiwi.h"
+#include "misc.h"
 #include "str.h"
 #include "sha256.h"
 
@@ -36,12 +37,12 @@ Boston, MA  02110-1301, USA.
 // any kstr_cstr argument = kstr_t|C-string|NULL
 // C-string: char array or string constant or NULL
 
-struct kstring_t {
-	struct kstring_t *next_free;
+typedef struct kstring_st {
+	struct kstring_st *next_free;
 	char *sp;
 	int size;
 	bool valid, externally_malloced;
-};
+} kstring_t;
 
 #define KSTRINGS	1024
 static kstring_t kstrings[KSTRINGS], *kstr_next_free;
@@ -71,7 +72,7 @@ static kstring_t *kstr_is(char *s_kstr_cstr)
 	}
 }
 
-enum kstr_malloc_e { KSTR_ALLOC, KSTR_REALLOC, KSTR_EXT_MALLOC };
+typedef enum { KSTR_ALLOC, KSTR_REALLOC, KSTR_EXT_MALLOC } kstr_malloc_e;
 
 static char *kstr_malloc(kstr_malloc_e type, char *s_kstr_cstr, int size)
 {
@@ -125,8 +126,8 @@ static char *kstr_what(char *s_kstr_cstr)
 	if (s_kstr_cstr == NULL) return (char *) "NULL";
 	kstring_t *ks = kstr_is(s_kstr_cstr);
 	if (ks) {
-		asprintf(&p, "#%ld:%d/%lu|%p|{%p}%s",
-			ks-kstrings, ks->size, strlen(ks->sp), ks, ks->sp, ks->externally_malloced? "-EXT":"");
+		asprintf(&p, "#%d:%d/%d|%p|{%p}%s",
+			(int) (ks-kstrings), ks->size, (int) strlen(ks->sp), ks, ks->sp, ks->externally_malloced? "-EXT":"");
 	} else {
 		asprintf(&p, "%p", s_kstr_cstr);
 	}

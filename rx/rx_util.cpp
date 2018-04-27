@@ -20,6 +20,7 @@ Boston, MA  02110-1301, USA.
 #include "types.h"
 #include "config.h"
 #include "kiwi.h"
+#include "rx.h"
 #include "misc.h"
 #include "str.h"
 #include "printf.h"
@@ -303,7 +304,7 @@ void webserver_collect_print_stats(int print)
 		
 		u4_t now = timer_sec();
 		if (c->freqHz != c->last_freqHz || c->mode != c->last_mode || c->zoom != c->last_zoom) {
-			if (print) loguser(c, LOG_UPDATE);
+			if (print) rx_loguser(c, LOG_UPDATE);
 			c->last_tune_time = now;
             c->last_freqHz = c->freqHz;
             c->last_mode = c->mode;
@@ -312,7 +313,7 @@ void webserver_collect_print_stats(int print)
 		} else {
 			u4_t diff = now - c->last_log_time;
 			if (diff > MINUTES_TO_SEC(5)) {
-				if (print) loguser(c, LOG_UPDATE_NC);
+				if (print) rx_loguser(c, LOG_UPDATE_NC);
 			}
 			
 			//cprintf(c, "oride=%d TO_MINS=%d exempt=%d\n", c->inactivity_timeout_override, inactivity_timeout_mins, c->tlimit_exempt);

@@ -1,6 +1,8 @@
-// Copyright (c) 2016 John Seamons, ZL/KF6VO
+// Copyright (c) 2017 John Seamons, ZL/KF6VO
 
 #include "ext.h"	// all calls to the extension interface begin with "ext_", e.g. ext_register()
+
+#include "kiwi.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -12,21 +14,21 @@
 #define DEBUG_MSG	false
 
 // rx_chan is the receiver channel number we've been assigned, 0..RX_CHAN
-// We need this so the extension can support multiple users, each with their own devl[] data structure.
+// We need this so the extension can support multiple users, each with their own navtex[] data structure.
 
-struct devl_t {
+typedef struct {
 	int rx_chan;
 	int run;
-};
+} navtex_t;
 
-static devl_t devl[RX_CHANS];
+static navtex_t navtex[RX_CHANS];
 
-bool devl_msgs(char *msg, int rx_chan)
+bool navtex_msgs(char *msg, int rx_chan)
 {
-	devl_t *e = &devl[rx_chan];
+	navtex_t *e = &navtex[rx_chan];
 	int n;
 	
-	//printf("### devl_msgs RX%d <%s>\n", rx_chan, msg);
+	//printf("### navtex_msgs RX%d <%s>\n", rx_chan, msg);
 	
 	if (strcmp(msg, "SET ext_server_init") == 0) {
 		e->rx_chan = rx_chan;	// remember our receiver channel number
@@ -42,16 +44,16 @@ bool devl_msgs(char *msg, int rx_chan)
 	return false;
 }
 
-void devl_main();
+void navtex_main();
 
-ext_t devl_ext = {
-	"devl",
-	devl_main,
+ext_t navtex_ext = {
+	"navtex",
+	navtex_main,
 	NULL,
-	devl_msgs,
+	navtex_msgs
 };
 
-void devl_main()
+void navtex_main()
 {
-	ext_register(&devl_ext);
+	ext_register(&navtex_ext);
 }

@@ -27,6 +27,7 @@
 
 #include "wspr.h"
 #include "net.h"
+#include "rx.h"
 #include "web.h"
 #include "non_block.h"
 

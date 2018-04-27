@@ -2,6 +2,8 @@
 
 #include "ext.h"	// all calls to the extension interface begin with "ext_", e.g. ext_register()
 
+#include "kiwi.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -12,21 +14,21 @@
 #define DEBUG_MSG	false
 
 // rx_chan is the receiver channel number we've been assigned, 0..RX_CHAN
-// We need this so the extension can support multiple users, each with their own navtex[] data structure.
+// We need this so the extension can support multiple users, each with their own lms[] data structure.
 
-struct navtex_t {
+typedef struct {
 	int rx_chan;
 	int run;
-};
+} lms_t;
 
-static navtex_t navtex[RX_CHANS];
+static lms_t lms[RX_CHANS];
 
-bool navtex_msgs(char *msg, int rx_chan)
+bool lms_msgs(char *msg, int rx_chan)
 {
-	navtex_t *e = &navtex[rx_chan];
+	lms_t *e = &lms[rx_chan];
 	int n;
 	
-	//printf("### navtex_msgs RX%d <%s>\n", rx_chan, msg);
+	//printf("### lms_msgs RX%d <%s>\n", rx_chan, msg);
 	
 	if (strcmp(msg, "SET ext_server_init") == 0) {
 		e->rx_chan = rx_chan;	// remember our receiver channel number
@@ -42,16 +44,16 @@ bool navtex_msgs(char *msg, int rx_chan)
 	return false;
 }
 
-void navtex_main();
+void lms_filter_main();
 
-ext_t navtex_ext = {
-	"navtex",
-	navtex_main,
+ext_t lms_ext = {
+	"LMS_filter",
+	lms_filter_main,
 	NULL,
-	navtex_msgs
+	lms_msgs,
 };
 
-void navtex_main()
+void lms_filter_main()
 {
-	ext_register(&navtex_ext);
+	ext_register(&lms_ext);
 }

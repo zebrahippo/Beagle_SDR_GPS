@@ -24,6 +24,7 @@ Boston, MA  02110-1301, USA.
 #include "str.h"
 #include "cfg.h"
 #include "gps.h"
+#include "rx.h"
 #include "ext_int.h"
 
 #include <stdio.h>

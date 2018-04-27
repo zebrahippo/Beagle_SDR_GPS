@@ -1,6 +1,7 @@
 #include "types.h"
 #include "config.h"
 #include "kiwi.h"
+#include "rx.h"
 #include "misc.h"
 #include "str.h"
 #include "web.h"

@@ -2,6 +2,8 @@
 
 #include "ext.h"	// all calls to the extension interface begin with "ext_", e.g. ext_register()
 
+#include "kiwi.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -12,21 +14,21 @@
 #define DEBUG_MSG	false
 
 // rx_chan is the receiver channel number we've been assigned, 0..RX_CHAN
-// We need this so the extension can support multiple users, each with their own fsk[] data structure.
+// We need this so the extension can support multiple users, each with their own colormap[] data structure.
 
-struct fsk_t {
+typedef struct {
 	int rx_chan;
 	int run;
-};
+} colormap_t;
 
-static fsk_t fsk[RX_CHANS];
+static colormap_t colormap[RX_CHANS];
 
-bool fsk_msgs(char *msg, int rx_chan)
+bool colormap_msgs(char *msg, int rx_chan)
 {
-	fsk_t *e = &fsk[rx_chan];
+	colormap_t *e = &colormap[rx_chan];
 	int n;
 	
-	//printf("### fsk_msgs RX%d <%s>\n", rx_chan, msg);
+	//printf("### colormap_msgs RX%d <%s>\n", rx_chan, msg);
 	
 	if (strcmp(msg, "SET ext_server_init") == 0) {
 		e->rx_chan = rx_chan;	// remember our receiver channel number
@@ -42,17 +44,16 @@ bool fsk_msgs(char *msg, int rx_chan)
 	return false;
 }
 
-void fsk_main();
+void colormap_main();
 
-ext_t fsk_ext = {
-	"fsk",
-	fsk_main,
+ext_t colormap_ext = {
+	"colormap",
+	colormap_main,
 	NULL,
-	fsk_msgs,
-	{ "JNX.js", "BiQuadraticFilter.js", "CCIR476.js", "FSK_async.js" }
+	colormap_msgs,
 };
 
-void fsk_main()
+void colormap_main()
 {
-	ext_register(&fsk_ext);
+	ext_register(&colormap_ext);
 }

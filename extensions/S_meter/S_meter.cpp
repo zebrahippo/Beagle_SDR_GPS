@@ -6,6 +6,8 @@
 	void S_meter_main() {}
 #else
 
+#include "kiwi.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -18,10 +20,10 @@
 // rx_chan is the receiver channel number we've been assigned, 0..RX_CHAN
 // We need this so the extension can support multiple users, each with their own S_meter[] data structure.
 
-struct S_meter_t {
+typedef struct {
 	int rx_chan;
 	int run;
-};
+} S_meter_t;
 
 static S_meter_t S_meter[RX_CHANS];
 

@@ -24,7 +24,6 @@ Boston, MA  02110-1301, USA.
 #include "timer.h"
 #include "web.h"
 #include "peri.h"
-#include "spi.h"
 #include "coroutines.h"
 #include "jsmn.h"
 #include "cfg.h"
@@ -40,6 +39,7 @@ Boston, MA  02110-1301, USA.
 #include <sys/stat.h>
 #include <time.h>
 #include <signal.h>
+#include <ctype.h>
 
 #define CFG_FN	DIR_CFG "/" CFG_PREFIX "kiwi.json";
 #define ADM_FN	DIR_CFG "/" CFG_PREFIX "admin.json"

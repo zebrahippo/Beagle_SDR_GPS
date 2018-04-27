@@ -594,19 +594,19 @@ unsigned int prussdrv_get_phys_addr(const void *address)
 {
     unsigned int retaddr = 0;
     if ((address >= prussdrv.pru0_dataram_base)
-        && (address <
+        && ((char*) address <
             (char*) prussdrv.pru0_dataram_base + prussdrv.pruss_map_size)) {
         retaddr =
             ((unsigned int) ((char*) address - (char*) prussdrv.pru0_dataram_base) +
              prussdrv.pru0_dataram_phy_base);
     } else if ((address >= prussdrv.l3ram_base)
-               && (address <
+               && ((char*) address <
                    (char*) prussdrv.l3ram_base + prussdrv.l3ram_map_size)) {
         retaddr =
             ((unsigned int) ((char*) address - (char*) prussdrv.l3ram_base) +
              prussdrv.l3ram_phys_base);
     } else if ((address >= prussdrv.extram_base)
-               && (address <
+               && ((char*) address <
                    (char*) prussdrv.extram_base + prussdrv.extram_map_size)) {
         retaddr =
             ((unsigned int) ((char*) address - (char*) prussdrv.extram_base) +

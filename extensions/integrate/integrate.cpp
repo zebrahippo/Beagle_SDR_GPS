@@ -7,6 +7,7 @@
 #else
 
 #include "kiwi.h"
+#include "misc.h"
 #include "cuteSDR.h"
 
 #include <stdio.h>
@@ -25,7 +26,7 @@
 
 #define MAX_BINS	200			// FIXME: max height of extension data canvas
 
-struct integrate_t {
+typedef struct {
 	int rx_chan;
 	int run, draw;
 	float fft_scale;
@@ -41,7 +42,7 @@ struct integrate_t {
 	double fi;
 	float pwr[MAX_BINS][INTEG_WIDTH];
 	int ncma[MAX_BINS];
-};
+} integrate_t;
 
 static integrate_t integrate[RX_CHANS];
 

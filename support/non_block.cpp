@@ -47,11 +47,11 @@ Boston, MA  02110-1301, USA.
     #include <sys/prctl.h>
 #endif
 
-struct zombies_t {
+typedef struct {
     #define ZEXP 4      // >= 2
     int size;
     pid_t *list;
-};
+} zombies_t;
 
 zombies_t zombies;
 

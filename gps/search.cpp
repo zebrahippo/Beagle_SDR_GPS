@@ -31,6 +31,7 @@
 
 #include "types.h"
 #include "kiwi.h"
+#include "rx.h"
 #include "clk.h"
 #include "cfg.h"
 #include "misc.h"
@@ -317,11 +318,6 @@ void SearchInit() {
             if (e1b_phase >= 1.0) { // reached or crossed chip boundary?
                 e1b_phase -= 1.0;
                 e1b.Clock();
-
-                // These two lines do not make much difference
-                boc11 = (e1b_phase >= 0.5)? 1:0;    // add in BOC11
-                chip *= 1.0 - e1b_phase;                 // prev chip
-                chip += e1b_phase * Bipolar(e1b.Chip() ^ boc11);  // next chip
             }
 
             fwd_buf[i][0] = chip;

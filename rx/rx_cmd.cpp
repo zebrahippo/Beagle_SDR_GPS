@@ -20,6 +20,7 @@ Boston, MA  02110-1301, USA.
 #include "types.h"
 #include "config.h"
 #include "kiwi.h"
+#include "rx.h"
 #include "clk.h"
 #include "misc.h"
 #include "str.h"
@@ -33,6 +34,7 @@ Boston, MA  02110-1301, USA.
 #include "coroutines.h"
 #include "net.h"
 #include "debug.h"
+#include "ext_int.h"
 
 #if RX_CHANS
  #include "data_pump.h"
@@ -60,7 +62,7 @@ char auth_su_remote_ip[NET_ADDRSTRLEN];
 const char *mode_s[N_MODE] = { "am", "amn", "usb", "lsb", "cw", "cwn", "nbfm", "iq" };
 const char *modu_s[N_MODE] = { "AM", "AMN", "USB", "LSB", "CW", "CWN", "NBFM", "IQ" };
 
-static struct dx_t *dx_list_first, *dx_list_last;
+static dx_t *dx_list_first, *dx_list_last;
 
 int bsearch_freqcomp(const void *key, const void *elem)
 {
@@ -394,7 +396,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 					rx_server_send_config(conn);
 				
 				// setup stream task first time it's authenticated
-				stream_t *st = &streams[conn->type];
+				rx_stream_t *st = &streams[conn->type];
 				if (st->setup) (st->setup)((void *) conn);
 			}
 		}
@@ -837,7 +839,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		    NextTask("gps_update3");
 		}
 
-		gps_stats_t::gps_chan_t *c;
+		gps_chan_t *c;
 		
 		asprintf(&sb, "{\"FFTch\":%d,\"ch\":[", gps.FFTch);
 		sb = kstr_wrap(sb);
@@ -1168,7 +1170,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		
 		//clprintf(conn, "SND user: <%s>\n", cmd);
 		if (!conn->arrived) {
-			loguser(conn, LOG_ARRIVED);
+			rx_loguser(conn, LOG_ARRIVED);
 			conn->arrived = TRUE;
 		}
 		

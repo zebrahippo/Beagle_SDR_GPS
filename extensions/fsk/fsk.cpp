@@ -2,6 +2,8 @@
 
 #include "ext.h"	// all calls to the extension interface begin with "ext_", e.g. ext_register()
 
+#include "kiwi.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -12,21 +14,21 @@
 #define DEBUG_MSG	false
 
 // rx_chan is the receiver channel number we've been assigned, 0..RX_CHAN
-// We need this so the extension can support multiple users, each with their own lms[] data structure.
+// We need this so the extension can support multiple users, each with their own fsk[] data structure.
 
-struct lms_t {
+typedef struct {
 	int rx_chan;
 	int run;
-};
+} fsk_t;
 
-static lms_t lms[RX_CHANS];
+static fsk_t fsk[RX_CHANS];
 
-bool lms_msgs(char *msg, int rx_chan)
+bool fsk_msgs(char *msg, int rx_chan)
 {
-	lms_t *e = &lms[rx_chan];
+	fsk_t *e = &fsk[rx_chan];
 	int n;
 	
-	//printf("### lms_msgs RX%d <%s>\n", rx_chan, msg);
+	//printf("### fsk_msgs RX%d <%s>\n", rx_chan, msg);
 	
 	if (strcmp(msg, "SET ext_server_init") == 0) {
 		e->rx_chan = rx_chan;	// remember our receiver channel number
@@ -42,16 +44,17 @@ bool lms_msgs(char *msg, int rx_chan)
 	return false;
 }
 
-void lms_filter_main();
+void fsk_main();
 
-ext_t lms_ext = {
-	"LMS_filter",
-	lms_filter_main,
+ext_t fsk_ext = {
+	"fsk",
+	fsk_main,
 	NULL,
-	lms_msgs,
+	fsk_msgs,
+	{ "JNX.js", "BiQuadraticFilter.js", "CCIR476.js", "FSK_async.js" }
 };
 
-void lms_filter_main()
+void fsk_main()
 {
-	ext_register(&lms_ext);
+	ext_register(&fsk_ext);
 }

@@ -25,6 +25,8 @@ Boston, MA  02110-1301, USA.
 #include "timing.h"
 #include "web.h"
 
+#include <time.h>
+
 //#define CLK_PRINTF
 #ifdef CLK_PRINTF
 	#define clk_printf(fmt, ...) \

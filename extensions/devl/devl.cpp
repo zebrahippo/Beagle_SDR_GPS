@@ -1,6 +1,8 @@
-// Copyright (c) 2017 John Seamons, ZL/KF6VO
+// Copyright (c) 2016 John Seamons, ZL/KF6VO
 
 #include "ext.h"	// all calls to the extension interface begin with "ext_", e.g. ext_register()
+
+#include "kiwi.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -12,21 +14,21 @@
 #define DEBUG_MSG	false
 
 // rx_chan is the receiver channel number we've been assigned, 0..RX_CHAN
-// We need this so the extension can support multiple users, each with their own colormap[] data structure.
+// We need this so the extension can support multiple users, each with their own devl[] data structure.
 
-struct colormap_t {
+typedef struct {
 	int rx_chan;
 	int run;
-};
+} devl_t;
 
-static colormap_t colormap[RX_CHANS];
+static devl_t devl[RX_CHANS];
 
-bool colormap_msgs(char *msg, int rx_chan)
+bool devl_msgs(char *msg, int rx_chan)
 {
-	colormap_t *e = &colormap[rx_chan];
+	devl_t *e = &devl[rx_chan];
 	int n;
 	
-	//printf("### colormap_msgs RX%d <%s>\n", rx_chan, msg);
+	//printf("### devl_msgs RX%d <%s>\n", rx_chan, msg);
 	
 	if (strcmp(msg, "SET ext_server_init") == 0) {
 		e->rx_chan = rx_chan;	// remember our receiver channel number
@@ -42,16 +44,16 @@ bool colormap_msgs(char *msg, int rx_chan)
 	return false;
 }
 
-void colormap_main();
+void devl_main();
 
-ext_t colormap_ext = {
-	"colormap",
-	colormap_main,
+ext_t devl_ext = {
+	"devl",
+	devl_main,
 	NULL,
-	colormap_msgs,
+	devl_msgs,
 };
 
-void colormap_main()
+void devl_main()
 {
-	ext_register(&colormap_ext);
+	ext_register(&devl_ext);
 }

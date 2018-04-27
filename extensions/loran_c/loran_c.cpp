@@ -6,6 +6,9 @@
 	void loran_c_main() {}
 #else
 
+#include "kiwi.h"
+#include "misc.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -18,7 +21,7 @@
 #define	SCOPE_DATA	0
 #define	SCOPE_RESET	1
 
-#define	GRI_2_SEC(gri)	(double (gri) / 1e5)
+#define	GRI_2_SEC(gri)	((double) (gri) / 1e5)
 
 #define MAX_GRI			9999
 #define	MAX_GRI_RATE	10
@@ -29,7 +32,7 @@
 // rx_chan is the receiver channel number we've been assigned, 0..RX_CHANS
 // We need this so the extension can support multiple users, each with their own loran_c[] data structure.
 
-struct loran_c_ch_t {
+typedef struct {
 	u4_t gri, samp, nbucket, dsp_samps, avg_samps, navgs;
 	double samp_per_GRI;
 	float avg[MAX_BUCKET];
@@ -37,9 +40,9 @@ struct loran_c_ch_t {
 	float gain, max;
 	int offset, avg_algo, avg_param;
 	bool restart;
-};
+} loran_c_ch_t;
 
-struct loran_c_t {
+typedef struct {
 	int rx_chan;
 	
 	u4_t i_srate;
@@ -50,7 +53,7 @@ struct loran_c_t {
 
 	u1_t scope[MAX_BUCKET];
 	bool redraw_legend;
-};
+} loran_c_t;
 
 static loran_c_t loran_c[RX_CHANS];
 
