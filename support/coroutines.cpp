@@ -782,6 +782,7 @@ u64_t TaskStartTime()
 void TaskForkChild()
 {
 	cur_task->flags |= CTF_FORK_CHILD;
+    our_pid = getpid();
 }
 
 bool TaskIsChild()
