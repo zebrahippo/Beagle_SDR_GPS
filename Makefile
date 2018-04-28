@@ -79,6 +79,7 @@ ifeq ($(DEBIAN_7),1)
 	CCPP_FLAGS += -std=gnu++0x
 else
 # clang(-3.5) on Debian 8.5 compiles project in 2 minutes vs 5 for gcc
+#	CFLAGS += -fsanitize=address -fno-omit-frame-pointer
 	CMD_DEPS_DEBIAN = /usr/bin/clang
 	CC = clang
 	CCPP = clang++
@@ -153,7 +154,7 @@ CFLAGS_UNSAFE_OPT = -funsafe-math-optimizations
 
 ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
 # development machine, compile simulation version
-	CFLAGS = -g -MD -DDEBUG -DDEVSYS
+	CFLAGS += -g -MD -DDEBUG -DDEVSYS
 	LIBS = -L/usr/local/lib -lfftw3f -lfftw3
 	LIBS_DEP = /usr/local/lib/libfftw3f.a /usr/local/lib/libfftw3.a
 	CMD_DEPS =
@@ -163,8 +164,8 @@ ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
 else
 
 # host machine (BBB), only build the FPGA-using version
-#	CFLAGS = -mfloat-abi=softfp -mfpu=neon
-	CFLAGS =  -mfpu=neon -mtune=cortex-a8 -mcpu=cortex-a8 -mfloat-abi=hard
+#	CFLAGS += -mfloat-abi=softfp -mfpu=neon
+	CFLAGS +=  -mfpu=neon -mtune=cortex-a8 -mcpu=cortex-a8 -mfloat-abi=hard
 #	CFLAGS += -O3
 	CFLAGS += -g -MD -DDEBUG -DHOST
 	LIBS = -lfftw3f -lfftw3 -lutil
@@ -483,6 +484,10 @@ else
 #
 	install -D -o root -g root -m 0644 unix_env/bashrc ~root/.bashrc
 	install -D -o root -g root -m 0644 unix_env/profile ~root/.profile
+#
+	install -D -o root -g root -m 0644 unix_env/gdbinit ~root/.gdbinit
+	install -D -o root -g root -m 0644 unix_env/gdb_break ~root/.gdb_break
+	install -D -o root -g root -m 0644 unix_env/gdb_valgrind ~root/.gdb_valgrind
 
 # only install config files if they've never existed before
 ifeq ($(EXISTS_BASHRC_LOCAL),1)
