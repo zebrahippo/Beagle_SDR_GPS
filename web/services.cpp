@@ -110,7 +110,7 @@ static void get_TZ(void *param)
 			lprintf("TIMEZONE: googleapis.com returned status \"%s\"\n", s);
 			err = true;
 		}
-		cfg_string_free(s);
+	    json_string_free(&cfg_tz, s);
 		if (err) goto retry;
 		
 		utc_offset = json_int(&cfg_tz, "rawOffset", &err, CFG_OPTIONAL);
@@ -123,8 +123,8 @@ static void get_TZ(void *param)
 		lprintf("TIMEZONE: for (%f, %f): utc_offset=%d/%.1f dst_offset=%d/%.1f\n",
 			lat, lon, utc_offset, (float) utc_offset / 3600, dst_offset, (float) dst_offset / 3600);
 		lprintf("TIMEZONE: \"%s\", \"%s\"\n", tzone_id, tzone_name);
-		s = tzone_id; tzone_id = kiwi_str_encode(s); cfg_string_free(s);
-		s = tzone_name; tzone_name = kiwi_str_encode(s); cfg_string_free(s);
+		s = tzone_id; tzone_id = kiwi_str_encode(s); json_string_free(&cfg_tz, s);
+		s = tzone_name; tzone_name = kiwi_str_encode(s); json_string_free(&cfg_tz, s);
 		
 		#define KIWI_SURVEY
 		#ifdef KIWI_SURVEY
@@ -194,11 +194,13 @@ static bool ipinfo_json(char *buf)
 	if (s == NULL) return false;
 	kiwi_strncpy(ddns.ip_pub, s, NET_ADDRSTRLEN);
 	iparams_add("IP_PUB", s);
+	json_string_free(&cfgx, s);
 	ddns.pub_valid = true;
 	
 	s = (char *) json_string(&cfgx, "loc", NULL, CFG_OPTIONAL);
 	if (s != NULL) {
 		n = sscanf(s, "%lf,%lf)", &ddns.lat, &ddns.lon);
+	    json_string_free(&cfgx, s);
 		if (n == 2) ddns.lat_lon_valid = true;
 	}
 	
@@ -286,6 +288,7 @@ static void dyn_DNS(void *param)
 		//reply = non_blocking_cmd("curl -s --ipv4 icanhazip.com", &status);
 		reply = non_blocking_cmd("curl -s --ipv4 --connect-timeout 15 ipinfo.io/json/", &status);
 		if (status < 0 || WEXITSTATUS(status) != 0 || reply == NULL || !ipinfo_json(kstr_sp(reply))) {
+		    kstr_free(reply);
 			reply = non_blocking_cmd("curl -s --ipv4 --connect-timeout 15 freegeoip.net/json/", &status);
 			if (status < 0 || WEXITSTATUS(status) != 0 || reply == NULL || !ipinfo_json(kstr_sp(reply)))
 				break;

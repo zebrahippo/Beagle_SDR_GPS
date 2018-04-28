@@ -528,6 +528,7 @@ int DNS_lookup(const char *domain_name, ip_lookup_t *r_ips, int n_ips, const cha
 	        printf("LOOKUP: \"%s\" %s\n", domain_name, ip_list[i]);
         }
         
+        free(r_buf);
         r_ips->valid = true;
 	} else {
 	    if (ip_backup != NULL) {

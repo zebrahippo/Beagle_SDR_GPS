@@ -174,7 +174,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
         }
 
 		int fd;
-		if (type_admin && check_ip_against_restricted && (fd = open(DIR_CFG "/opt.admin_ip", O_RDONLY)) != 0) {
+		if (type_admin && check_ip_against_restricted && (fd = open(DIR_CFG "/opt.admin_ip", O_RDONLY)) != -1) {
 		    char admin_ip[NET_ADDRSTRLEN];
 		    n = read(fd, admin_ip, NET_ADDRSTRLEN);
 		    if (n >= 1) {

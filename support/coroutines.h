@@ -175,7 +175,8 @@ typedef struct {
 	bool init;
 	u4_t enter, leave;
 	const char *name;
-	char *enter_name;
+	#define LEN_ENTER_NAME  32
+	char enter_name[LEN_ENTER_NAME];
 	void *owner;
 	void *users;                    // queue of lock users
 	u4_t n_prio_swap, n_prio_inversion;

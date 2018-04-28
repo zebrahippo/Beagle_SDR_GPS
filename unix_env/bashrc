@@ -160,6 +160,7 @@ alias mu="make users"
 #	handle SIGUSR2 nostop noprint
 #	target remote | vgdb
 alias vg="valgrind -v --track-origins=yes --leak-check=full kiwi.bin -gps"
+alias vgall="valgrind -v --track-origins=yes --leak-check=full --show-leak-kinds=all kiwi.bin -gps"
 alias vggps="valgrind -v --track-origins=yes --leak-check=full kiwi.bin"
 alias vggdb="valgrind -v --track-origins=yes --leak-check=full --vgdb-error=0 kiwi.bin -gps"
 alias vggdbgps="valgrind -v --track-origins=yes --leak-check=full --vgdb-error=0 kiwi.bin"

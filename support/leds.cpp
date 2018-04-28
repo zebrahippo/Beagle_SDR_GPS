@@ -158,7 +158,7 @@ static void led_reporter(void *param)
     bool error;
     u4_t a, b, c, d;
     inet4_d2h(ddns.ip_pvt, &error, &a, &b, &c, &d);
-    printf("led_reporter ip_pvt=%s inet4_d2h.error=%d\n", ddns.ip_pvt, error);
+    //printf("led_reporter ip_pvt=%s inet4_d2h.error=%d\n", ddns.ip_pvt, error);
 	bool use_static = (admcfg_bool("use_static", NULL, CFG_REQUIRED) == true);
     
     while (1) {

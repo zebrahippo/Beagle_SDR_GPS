@@ -1381,7 +1381,7 @@ void _lock_init(lock_t *lock, const char *name)
 	memset(lock, 0, sizeof(*lock));
 	lock->name = name;
 	// for NextTask() inside lock_enter()
-    asprintf(&lock->enter_name, "lock enter: %s", name);    // never freed, but doesn't matter
+    sprintf(lock->enter_name, "lock enter: %.*s", LEN_ENTER_NAME, name);
 	lock->init = true;
 	lock->magic_b = LOCK_MAGIC_B;
 	lock->magic_e = LOCK_MAGIC_E;

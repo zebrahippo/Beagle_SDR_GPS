@@ -445,9 +445,13 @@ void wspr_init()
     
     bool autorun = true;
     bool err;
-	wspr_c.rcall = kiwi_str_encode((char *) cfg_string("WSPR.callsign", &err, CFG_OPTIONAL));
+    char *s = (char *) cfg_string("WSPR.callsign", &err, CFG_OPTIONAL);
+	wspr_c.rcall = kiwi_str_encode(s);
+	cfg_string_free(s);
 	if (err || *wspr_c.rcall == '\0') autorun = false;
-	wspr_c.rgrid = kiwi_str_encode((char *) cfg_string("WSPR.grid", &err, CFG_OPTIONAL));
+	s = (char *) cfg_string("WSPR.grid", &err, CFG_OPTIONAL);
+	wspr_c.rgrid = kiwi_str_encode(s);
+	cfg_string_free(s);
 	if (err || *wspr_c.rgrid == '\0') autorun = false;
 	//printf("autorun %d rcall <%s> rgrid <%s>\n", autorun, wspr_c.rcall, wspr_c.rgrid);
 

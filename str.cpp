@@ -156,7 +156,9 @@ char *kstr_wrap(char *s_malloced)
 	return kstr_malloc(KSTR_EXT_MALLOC, s_malloced, 0);
 }
 
-// only frees a kstr object, will not free a malloc()'d C-string unless kstr_wrap()'d
+// Only frees a kstr object, will not free a malloc()'d C-string unless kstr_wrap()'d.
+// It is normal that this routine might be called with a C-string in code that is freeing
+// a mix of kstr and C-strings (wrapped or not).
 // kstr_cstr: kstr|C-string|NULL
 void kstr_free(char *s_kstr_cstr)
 {
