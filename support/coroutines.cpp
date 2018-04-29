@@ -55,13 +55,11 @@
 	
 	The interest in moving to Debian 8 was motivated by needing a more recent valgrind that didn't
 	have a bug interfacing with gdb. And also that SPIDEV DMA is fixed in the more recent Debian 8
-	kernel. But valgrind doesn't work with either thread initialization method on Debian 8
-	for unknown reasons. The valgrind facility for declaring private stacks seems to be broken.
+	kernel.
 
-	In the end we compiled a recent version of valgrind on Debian 7 to get around the gdb issue.
-	But note that the signal method doesn't work with valgrind even on Debian 7 (reasons unknown).
-
-	Both methods are included in the code. The jmp_buf method with de-mangling is currently the default.
+	Both methods are included in the code. But note that the signal method doesn't work with valgrind
+	even on Debian 7 (reasons unknown). The jmp_buf method with de-mangling is currently the default
+	so that those few Kiwis still running Debian 7 will continue to work.
 
 */
 
