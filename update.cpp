@@ -190,6 +190,7 @@ static void update_task(void *param)
 		// Run build in a Linux child process so the server can continue to respond to connection requests
 		// and display a "software update in progress" message.
 		// This is because the calls to system() in update_build_ctask() block for the duration of the build.
+		u4_t build_time = timer_sec();
 		status = child_task("kiwi.bld", POLL_MSEC(1000), update_build_ctask, TO_VOID_PARAM(force_build));
 		
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
@@ -198,6 +199,7 @@ static void update_task(void *param)
 		    goto common_return;
 		}
 		
+		lprintf("UPDATE: build took %d secs\n", timer_sec() - build_time);
 		lprintf("UPDATE: switching to new version %d.%d\n", pending_maj, pending_min);
 		if (admcfg_int("update_restart", NULL, CFG_REQUIRED) == 0) {
 		    xit(0);
