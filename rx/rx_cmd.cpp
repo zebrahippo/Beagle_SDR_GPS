@@ -439,12 +439,13 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 			return true;	// fake that we accepted command so it won't be further processed
 		}
 
-		char *json = cfg_realloc_json(strlen(cmd), CFG_NONE);	// a little bigger than necessary
+		char *json = (char *) malloc(strlen(cmd) + SPACE_FOR_NULL); // a little bigger than necessary
 		n = sscanf(cmd, "SET save_cfg=%s", json);
 		assert(n == 1);
 		//printf("SET save_cfg=...\n");
 		kiwi_str_decode_inplace(json);
 		cfg_save_json(json);
+		free(json);
 		update_vars_from_config();      // update C copies of vars
 
 		return true;
@@ -461,12 +462,13 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 			return true;	// fake that we accepted command so it won't be further processed
 		}
 
-		char *json = admcfg_realloc_json(strlen(cmd), CFG_NONE);	// a little bigger than necessary
+		char *json = (char *) malloc(strlen(cmd) + SPACE_FOR_NULL); // a little bigger than necessary
 		n = sscanf(cmd, "SET save_adm=%s", json);
 		assert(n == 1);
 		//printf("SET save_adm=...\n");
 		kiwi_str_decode_inplace(json);
 		admcfg_save_json(json);
+		free(json);
 		//update_vars_from_config();    // no admin vars need to be updated on save currently
 		
 		return true;

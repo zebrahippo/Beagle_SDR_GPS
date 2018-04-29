@@ -536,7 +536,6 @@ void SearchTask(void *param) {
             min_sig = (sp->type == E1B)? 16 : minimum_sig;
 
             if (sp->busy) {     // sat already acquired?
-                gps.include_alert_gps = admcfg_bool("include_alert_gps", NULL, CFG_REQUIRED);
             	NextTask("busy1");		// let cpu run
                 continue;
             }
@@ -590,6 +589,7 @@ void SearchTask(void *param) {
             GPSstat(STAT_DOP, 0, ch, lo_shift*BIN_SIZE, ca_shift);
 
             sp->busy = true;
+            gps.include_alert_gps = admcfg_bool("include_alert_gps", NULL, CFG_REQUIRED);
 
 			//printf("ChanStart ch%02d %s snr=%.0f init=0x%x lo_shift=%d ca_shift=%d\n",
 			//    ch+1, PRN(sat), snr, init, (int) (lo_shift*BIN_SIZE), ca_shift);
