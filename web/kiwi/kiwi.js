@@ -14,6 +14,10 @@ var modes_u = { 0:'AM', 1:'AMN', 2:'USB', 3:'LSB', 4:'CW', 5:'CWN', 6:'NBFM', 7:
 var modes_l = { 0:'am', 1:'amn', 2:'usb', 3:'lsb', 4:'cw', 5:'cwn', 6:'nbfm', 7:'iq' };
 var modes_s = { 'am':0, 'amn':1, 'usb':2, 'lsb':3, cw:4, 'cwn':5, 'nbfm':6, 'iq':7 };
 
+var types = { 0:'active', 1:'watch-list', 2:'sub-band', 3:'DGPS', 4:'NoN' , 5:'interference' };
+var types_s = { active:0, watch_list:1, sub_band:2, DGPS:3, NoN:4 , interference:5 };
+var type_colors = { 0:'cyan', 0x10:'lightPink', 0x20:'aquamarine', 0x30:'lavender', 0x40:'violet' , 0x50:'violet' };
+
 var timestamp;
 
 //var optbar_prefix_color = 'w3-text-css-lime';
@@ -91,7 +95,7 @@ function kiwi_ask_pwd(conn_kiwi)
 		((conn_kiwi && chan_no_pwd)? 'All channels busy that don\'t require a password ('+ chan_no_pwd +'/'+ rx_chans +')<br>':'') +
 		"<form name='pform' style='display:inline-block' action='#' onsubmit='ext_valpwd(\""+ conn_type +"\", this.pwd.value); return false;'>"+
 			try_again +
-			w3_input('w3-margin-left w3-label-inline kiwi-pw w3-label-not-bold|padding:1px|name="pwd" size=40 onclick="this.focus(); this.select()"', 'Password:') +
+			w3_input('w3-label-inline w3-label-not-bold/kiwi-pw|padding:1px|name="pwd" size=40 onclick="this.focus(); this.select()"', 'Password:') +
 		"</form>";
 	kiwi_show_msg(s);
 	document.pform.pwd.focus();
@@ -113,6 +117,10 @@ function kiwi_valpwd1_cb(badp, p)
 	} else
 	if (badp == 2) {
 	   kiwi_show_msg('Still determining local interface address.<br>Please try reloading page in a few moments.');
+	   return;
+	} else
+	if (badp == 3) {
+	   kiwi_show_msg('Admin connections not allowed from this ip address.');
 	   return;
 	} else
 	if (badp == 0) {
@@ -382,12 +390,12 @@ function time_display_setup(ext_name_or_id)
 	el.innerHTML =
 		'<div id="id-time-display-inner">' +
 			'<div id="id-time-display-text-inner">' +
-				w3_divs('', 'w3-vcenter',
-					w3_divs('', 'w3-show-inline-block',
+				w3_div('w3-valign',
+					w3_div('w3-show-inline-block',
 						w3_div('id-time-display-UTC'),
 						w3_div('cl-time-display-text-suffix', 'UTC')
 					),
-					w3_divs('', 'w3-show-inline-block',
+					w3_div('w3-show-inline-block',
 						w3_div('id-time-display-local'),
 						w3_div('cl-time-display-text-suffix', 'Local')
 					),
@@ -425,13 +433,13 @@ function show_pref()
 {
 	pref_load(function() {
 		var s =
-			w3_divs('w3-text-css-yellow', 'w3-tspace-16',
-				w3_divs('', 'w3-medium w3-text-aqua', '<b>User preferences</b>'),
-				w3_col_percent('', '',
+			w3_divs('w3-text-css-yellow/w3-tspace-16',
+				w3_div('w3-medium w3-text-aqua', '<b>User preferences</b>'),
+				w3_col_percent('',
 					w3_input('', 'Pref', 'pref.p', pref.p, 'pref_p_cb', 'something'), 30
 				),
 				
-				w3_divs('', 'w3-show-inline-block w3-hspace-16',
+				w3_div('w3-show-inline-block w3-hspace-16',
 					w3_button('', 'Export', 'pref_export_btn_cb'),
 					w3_button('', 'Import', 'pref_import_btn_cb'),
 					'<b>Status:</b> ' + w3_div('id-pref-status w3-show-inline-block w3-snap-back')
@@ -655,7 +663,7 @@ function admin_stats_cb(audio_dropped, underruns, seq_errors, dpump_resets, dpum
 function kiwi_too_busy(rx_chans)
 {
 	var s = 'Sorry, the KiwiSDR server is too busy right now ('+ rx_chans+((rx_chans>1)? ' users':' user') +' max). <br>' +
-	'Please check <a href="http://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
+	'Please check <a href="https://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
 	kiwi_show_msg(s);
 }
 
@@ -670,7 +678,7 @@ function kiwi_show_error_ask_exemption(s)
 {
    s += '<br><br>If you have an exemption password from the KiwiSDR owner/admin <br> please enter it here: ' +
       '<form name="pform" style="display:inline-block" action="#" onsubmit="kiwi_ip_limit_pwd_cb(this.pinput.value); return false">' +
-			w3_input('w3-margin-left w3-label-inline kiwi-pw w3-label-not-bold|padding:1px|name="pinput" size=40 onclick="this.focus(); this.select()"', 'Password:') +
+			w3_input('w3-label-inline w3-label-not-bold/kiwi-pw|padding:1px|name="pinput" size=40 onclick="this.focus(); this.select()"', 'Password:') +
       '</form>';
 
 	kiwi_show_msg(s);
@@ -687,7 +695,7 @@ function kiwi_24hr_ip_limit(mins, ip)
 {
 	var s = 'Sorry, this KiwiSDR can only be used for '+ mins +' minutes every 24 hours by each IP address.<br>' +
       //'Your IP address is: '+ ip +'<br>' +
-      'Please check <a href="http://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
+      'Please check <a href="https://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
 	
 	kiwi_show_error_ask_exemption(s);
 }
@@ -709,7 +717,7 @@ function kiwi_down(type, comp_ctr, reason)
 
 	if (type == 1) {
 		s = 'Sorry, software update in progress. Please check back in a few minutes.<br>' +
-			'Or check <a href="http://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
+			'Or check <a href="https://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
 		
 		if (comp_ctr > 0 && comp_ctr < 9000)
 			s += '<br>Build: compiling file #'+ comp_ctr;
@@ -728,7 +736,7 @@ function kiwi_down(type, comp_ctr, reason)
 	} else {
 		if (reason == null || reason == '') {
 			reason = 'Sorry, this KiwiSDR server is being used for development right now. <br>' +
-				'Please check <a href="http://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
+				'Please check <a href="https://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
 		}
 		s = reason;
 	}
@@ -825,13 +833,13 @@ function config_cb(rx_chans, gps_chans, serno, pub, port_ext, pvt, port_int, nm,
 	var net_config = w3_el("id-net-config");
 	if (net_config) {
 		net_config.innerHTML =
-			w3_divs('', '',
-				w3_col_percent('', '',
+			w3_div('',
+				w3_col_percent('',
 					w3_div('', 'Public IP address (outside your firewall/router): '+ pub +' [port '+ port_ext +']'), 50,
 					w3_div('', 'Ethernet MAC address: '+ mac.toUpperCase()), 30,
 					w3_div('', 'KiwiSDR serial number: '+ serno), 20
 				),
-				w3_col_percent('', '',
+				w3_col_percent('',
 					w3_div('', 'Private IP address (inside your firewall/router): '+ pvt +' [port '+ port_int +']'), 50,
 					w3_div('', 'Private netmask: /'+ nm), 50
 				)
@@ -926,7 +934,7 @@ function user_cb(obj)
 			var f = (f/1000).toFixed((f > 100e6)? 1:2);
 			var f_s = f + ' kHz ';
 			var fo = (freq/1000).toFixed(2);
-			var anchor = '<a href="javascript:tune('+ fo +','+ q(mode) +','+ zoom +');">';
+			var anchor = '<a href="javascript:tune('+ fo +','+ sq(mode) +','+ zoom +');">';
 			if (ext != '') ext = decodeURIComponent(ext) +' ';
 			s1 = id + g;
 			s2 = anchor + f_s + mode +' z'+ zoom +'</a> '+ ext + connected;

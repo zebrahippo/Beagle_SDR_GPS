@@ -337,7 +337,7 @@ void webserver_collect_print_stats(int print)
 				if (print) rx_loguser(c, LOG_UPDATE_NC);
 			}
 			
-			//cprintf(c, "oride=%d TO_MINS=%d exempt=%d\n", c->inactivity_timeout_override, inactivity_timeout_mins, c->tlimit_exempt);
+			//cprintf(c, "TO_MINS=%d exempt=%d\n", inactivity_timeout_mins, c->tlimit_exempt);
 			if (!c->inactivity_timeout_override && (inactivity_timeout_mins != 0) && !c->tlimit_exempt) {
 				diff = now - c->last_tune_time;
 			    //cprintf(c, "diff=%d TO_SECS=%d\n", diff, MINUTES_TO_SEC(inactivity_timeout_mins));
@@ -420,18 +420,15 @@ void webserver_collect_print_stats(int print)
 	audio_bytes = waterfall_bytes = http_bytes = 0;
 
 	// on the hour: report number of connected users & schedule updates
-	time_t t;
-	time(&t);
-	struct tm tm;
-	localtime_r(&t, &tm);
+	int hour, min; utc_hour_min_sec(&hour, &min, NULL);
 	
-	if (tm.tm_hour != last_hour) {
+	if (hour != last_hour) {
 		if (print) lprintf("(%d %s)\n", nusers, (nusers==1)? "user":"users");
-		last_hour = tm.tm_hour;
+		last_hour = hour;
 	}
 
-	if (tm.tm_min != last_min) {
-		schedule_update(tm.tm_hour, tm.tm_min);
-		last_min = tm.tm_min;
+	if (min != last_min) {
+		schedule_update(hour, min);
+		last_min = min;
 	}
 }
