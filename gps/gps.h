@@ -120,7 +120,7 @@ typedef struct {
 #define is_QZSS(sat)        (Sats[sat].type == QZSS)
 #define is_E1B(sat)         (Sats[sat].type == E1B)
 
-#define MAX_SATS    60
+#define MAX_SATS    64
 
 extern SATELLITE Sats[];
 
@@ -130,7 +130,7 @@ extern SATELLITE Sats[];
 
 #define NUM_E1B_SATS    50
 
-extern u2_t E1B_code16[NUM_E1B_SATS][I_DIV_CEIL(E1B_CODELEN, 16)];
+extern u1_t E1B_code1[NUM_E1B_SATS][E1B_CODELEN];
 
 #define PRN(sat)        (Sats[sat].prn_s)
 
@@ -141,7 +141,7 @@ void SearchInit();
 void SearchFree();
 void SearchTask(void *param);
 bool SearchTaskRun();
-void SearchEnable(int ch, int sat, bool restart);
+void SearchEnable(int sat);
 void SearchParams(int argc, char *argv[]);
 
 //////////////////////////////////////////////////////////////
@@ -196,7 +196,7 @@ typedef struct {
     int sub, sub_renew;
     int novfl, frames, par_errs;
     int az, el;
-    int soln;
+    int has_soln;
     int ACF_mode;
 } gps_chan_t;
 
@@ -206,20 +206,24 @@ typedef struct {
 } gps_pos_t;
 
 typedef struct {
-    u4_t seq;
     float lat, lon;
 } gps_map_t;
 
 typedef struct {
 	bool acquiring, tLS_valid;
 	unsigned start, ttff;
-	int tracking, good, fixes, FFTch;
+	int tracking, good, FFTch;
+
+    int last_samp_hour;
+	u4_t fixes, fixes_min, fixes_min_incr;
+	u4_t fixes_hour, fixes_hour_incr, fixes_hour_samples;
+
 	double StatSec, StatLat, StatLon, StatAlt, sgnLat, sgnLon;
 	int StatDay;    // 0 = Sunday
 	int StatNS, StatEW;
     signed delta_tLS, delta_tLSF;
     bool include_alert_gps;
-    int soln, E1B_plot_separately;
+    int soln_type, E1B_plot_separately;
 	gps_chan_t ch[GPS_CHANS];
 	
 	//#define AZEL_NSAMP (4*60)
@@ -238,9 +242,13 @@ typedef struct {
 	bool have_ref_lla;
 	float ref_lat, ref_lon, ref_alt;
 
-    #define WITHOUT_E1B 0
-    #define WITH_E1B 1
-    #define ONLY_E1B 2
+    // E1B_plot_separately == false
+    #define MAP_ALL 0           // green map pin
+    
+    // E1B_plot_separately == true
+    #define MAP_WITHOUT_E1B 0   // green map pin
+    #define MAP_WITH_E1B 1      // red map pin
+    #define MAP_ONLY_E1B 2      // yellow map pin
 
     #define GPS_NPOS 2
     #define GPS_POS_SAMPS 64
@@ -250,6 +258,7 @@ typedef struct {
     #define GPS_NMAP 3
     #define GPS_MAP_SAMPS 16
 	gps_map_t MAP_data[GPS_NMAP][GPS_MAP_SAMPS];
+	u4_t MAP_data_seq[GPS_MAP_SAMPS];
 	u4_t MAP_next, MAP_len, MAP_seq_w, MAP_seq_r;
 	
 	int gps_gain, kick_lo_pll_ch;

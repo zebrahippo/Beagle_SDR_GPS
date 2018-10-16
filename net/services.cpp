@@ -91,13 +91,22 @@ static void get_TZ(void *param)
 			goto retry;
 		}
 	
-		time_t utc_sec; time(&utc_sec);
-		asprintf(&cmd_p, "curl -s --ipv4 \"https://maps.googleapis.com/maps/api/timezone/json?location=%f,%f&timestamp=%lu&sensor=false\" 2>&1",
-			lat, lon, utc_sec);
+		#define TIMEZONE_DB_COM
+		#ifdef TIMEZONE_DB_COM
+            #define TZ_SERVER "timezonedb.com"
+            asprintf(&cmd_p, "curl -s --ipv4 \"http://api.timezonedb.com/v2.1/get-time-zone?key=HIHUSGTXYI55&format=json&by=position&lat=%f&lng=%f\" 2>&1",
+                lat, lon);
+        #else
+            #define TZ_SERVER "googleapis.com"
+            time_t utc_sec; time(&utc_sec);
+            asprintf(&cmd_p, "curl -s --ipv4 \"https://maps.googleapis.com/maps/api/timezone/json?key=AIzaSyCtWThmj37c62a1qYzYUjlA0XUVC_lG8B8&location=%f,%f&timestamp=%lu&sensor=false\" 2>&1",
+                lat, lon, utc_sec);
+        #endif
+
 		reply = non_blocking_cmd(cmd_p, &stat);
 		free(cmd_p);
 		if (reply == NULL || stat < 0 || WEXITSTATUS(stat) != 0) {
-			lprintf("TIMEZONE: googleapis.com curl error\n");
+			lprintf("TIMEZONE: %s curl error\n", TZ_SERVER);
 		    kstr_free(reply);
 			goto retry;
 		}
@@ -108,18 +117,26 @@ static void get_TZ(void *param)
 		s = (char *) json_string(&cfg_tz, "status", &err, CFG_OPTIONAL);
 		if (err) goto retry;
 		if (strcmp(s, "OK") != 0) {
-			lprintf("TIMEZONE: googleapis.com returned status \"%s\"\n", s);
+			lprintf("TIMEZONE: %s returned status \"%s\"\n", TZ_SERVER, s);
 			err = true;
 		}
 	    json_string_free(&cfg_tz, s);
 		if (err) goto retry;
 		
-		utc_offset = json_int(&cfg_tz, "rawOffset", &err, CFG_OPTIONAL);
-		if (err) goto retry;
-		dst_offset = json_int(&cfg_tz, "dstOffset", &err, CFG_OPTIONAL);
-		if (err) goto retry;
-		tzone_id = (char *) json_string(&cfg_tz, "timeZoneId", NULL, CFG_OPTIONAL);
-		tzone_name = (char *) json_string(&cfg_tz, "timeZoneName", NULL, CFG_OPTIONAL);
+		#ifdef TIMEZONE_DB_COM
+            utc_offset = json_int(&cfg_tz, "gmtOffset", &err, CFG_OPTIONAL);
+            if (err) goto retry;
+            dst_offset = 0;     // gmtOffset includes dst offset
+            tzone_id = (char *) json_string(&cfg_tz, "abbreviation", NULL, CFG_OPTIONAL);
+            tzone_name = (char *) json_string(&cfg_tz, "zoneName", NULL, CFG_OPTIONAL);
+        #else
+            utc_offset = json_int(&cfg_tz, "rawOffset", &err, CFG_OPTIONAL);
+            if (err) goto retry;
+            dst_offset = json_int(&cfg_tz, "dstOffset", &err, CFG_OPTIONAL);
+            if (err) goto retry;
+            tzone_id = (char *) json_string(&cfg_tz, "timeZoneId", NULL, CFG_OPTIONAL);
+            tzone_name = (char *) json_string(&cfg_tz, "timeZoneName", NULL, CFG_OPTIONAL);
+        #endif
 		
 		lprintf("TIMEZONE: for (%f, %f): utc_offset=%d/%.1f dst_offset=%d/%.1f\n",
 			lat, lon, utc_offset, (float) utc_offset / 3600, dst_offset, (float) dst_offset / 3600);
@@ -477,11 +494,11 @@ static void git_commits(void *param)
 /*
     // task
     reg_SDR_hu()
-        status = non_blocking_cmd_func_child(cmd, _reg_SDR_hu)
+        status = non_blocking_cmd_func_forall(cmd, _reg_SDR_hu)
 		    if (WIFEXITED(status) && (exit_status = WEXITSTATUS(status)))
 		        retrytime_mins = exit_status;
 
-    non_blocking_cmd_func_child(cmd, func)
+    non_blocking_cmd_func_forall(cmd, func)
         return status = child_task(_non_blocking_cmd_forall, cmd, func)
     
     child_task(func)
@@ -538,7 +555,7 @@ static int _reg_SDR_hu(void *param)
         
         // pass sdr.hu reply message back to parent task
         //printf("SET sdr_hu_status %d [%s]\n", strlen(sp2), sp2);
-        kiwi_strncpy(shmem->sdr_hu_status, sp2, N_LOG_MSG_LEN);
+        kiwi_strncpy(shmem->status_str, sp2, N_SHMEM_STATUS_STR);
     }
 	
 	return retrytime_mins;
@@ -586,7 +603,7 @@ static void reg_SDR_hu(void *param)
             if (sdr_hu_debug)
                 printf("%s\n", cmd_p);
 
-		    int status = non_blocking_cmd_func_child("kiwi.reg", cmd_p, _reg_SDR_hu, retrytime_mins, POLL_MSEC(1000));
+		    int status = non_blocking_cmd_func_forall("kiwi.reg", cmd_p, _reg_SDR_hu, retrytime_mins, POLL_MSEC(1000));
 		    int exit_status;
 		    if (WIFEXITED(status) && (exit_status = WEXITSTATUS(status))) {
 		        retrytime_mins = exit_status;
@@ -664,7 +681,7 @@ static void reg_kiwisdr_com(void *param)
                 printf("%s\n", cmd_p);
 
             retrytime_mins = RETRYTIME_KIWISDR_COM;
-		    int status = non_blocking_cmd_func_child("kiwi.reg", cmd_p, _reg_kiwisdr_com, retrytime_mins, POLL_MSEC(1000));
+		    int status = non_blocking_cmd_func_forall("kiwi.reg", cmd_p, _reg_kiwisdr_com, retrytime_mins, POLL_MSEC(1000));
 		    int exit_status;
 		    if (WIFEXITED(status) && (exit_status = WEXITSTATUS(status))) {
 		        reg_kiwisdr_com_status = exit_status;
@@ -685,6 +702,8 @@ static void reg_kiwisdr_com(void *param)
 	}
 }
 
+int reg_kiwisdr_com_tid;
+
 void services_start(bool restart)
 {
 	CreateTask(dyn_DNS, 0, WEBSERVER_PRIORITY);
@@ -693,6 +712,6 @@ void services_start(bool restart)
 
 	if (!no_net && !restart && !alt_port) {
 		CreateTask(reg_SDR_hu, 0, WEBSERVER_PRIORITY);
-		CreateTask(reg_kiwisdr_com, 0, WEBSERVER_PRIORITY);
+		reg_kiwisdr_com_tid = CreateTask(reg_kiwisdr_com, 0, WEBSERVER_PRIORITY);
 	}
 }

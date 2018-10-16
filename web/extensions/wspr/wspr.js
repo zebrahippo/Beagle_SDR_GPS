@@ -295,7 +295,7 @@ function wspr_controls_setup()
 
 	var controls_html =
 	w3_div('id-wspr-controls',
-		w3_inline('w3-halign-between|width:83%/',
+		w3_inline('w3-halign-space-between|width:83%/',
          w3_select('', '', 'band', 'wspr_init_band', wspr_init_band, wspr_freqs_u, 'wspr_band_select_cb'),
          w3_button('cl-wspr-button', 'stop', 'wspr_stop_start_cb'),
          w3_button('cl-wspr-button', 'clear', 'wspr_clear_cb'),
@@ -305,7 +305,7 @@ function wspr_controls_setup()
          w3_div('w3-medium w3-text-aqua cl-viewer-label', '<b>WSPR<br>viewer</b>')
 		),
 
-		w3_inline('',
+		w3_inline('w3-halign-space-between/',
          w3_div('cl-wspr-pie|background-color:#575757',
             kiwi_pie('id-wspr-pie', pie_size, '#eeeeee', 'deepSkyBlue')
          ),
@@ -373,6 +373,7 @@ function wspr_controls_setup()
 function wspr_help(show)
 {
    console.log('wspr_help show='+ show);
+   if (1) return false;
    if (show) {
       var s = 'And this is where WSPR help goes..';
       confirmation_show_content(s);
@@ -403,28 +404,14 @@ function wspr_band_select_cb(path, idx, first)
 function wspr_focus()
 {
    //console.log('### wspr_focus');
-   var el = w3_el('id-wspr-grid-set');
-   // when focus is from admin extension tab
-	if (el) {
-	   el.onclick = function() {
-	      // FIXME
-         var val = '???';
-         //w3_set_value('WSPR.grid', val);
-         //w3_input_change('WSPR.grid', 'wspr_input_grid');
-      };
-   }
 }
 
 function wspr_blur()
 {
 	//console.log('### wspr_blur');
-   var el = w3_el('id-wspr-grid-set');
-   // when focus is _not_ from admin extension tab
-	if (!el) {
-      ext_send('SET capture=0');
-      kiwi_clearTimeout(wspr_upload_timeout);
-      kiwi_clearInterval(wspr_pie_interval);
-   }
+   ext_send('SET capture=0');
+   kiwi_clearTimeout(wspr_upload_timeout);
+   kiwi_clearInterval(wspr_pie_interval);
 }
 
 function wspr_input_grid(path, val)
@@ -445,35 +432,59 @@ function wspr_config_html()
 		w3_div('id-wspr w3-text-teal w3-hide',
 			'<b>WSPR configuration</b>',
 			'<hr>',
-			w3_half('', 'w3-container',
-				w3_divs('w3-margin-bottom',
-					w3_input_get('', 'BFO Hz (multiple of 375 Hz, i.e. 375, 750, 1125, 1500)', 'WSPR.BFO', 'w3_num_set_cfg_cb', '', 'typically 750 Hz'),
-					w3_input_get('', 'Reporter callsign', 'WSPR.callsign', 'w3_string_set_cfg_cb', ''),
-					w3_input_get('', w3_label('w3-bold', 'Reporter grid square ') +
-						w3_div('id-wspr-grid-set cl-admin-check w3-show-inline-block w3-blue w3-btn w3-round-large w3-hide', 'set from GPS'),
-					   'WSPR.grid', 'wspr_input_grid', '', '4 or 6-character grid square location'
-					)
-				), ''
-			),
-			'<hr>',
-			w3_div('w3-container',
-            w3_div('', '<b>Autorun</b>'),
-			   w3_div('w3-container',
-               w3_div('w3-text-black', 'On startup automatically begins running the WSPR decoder on the selected band(s).<br>' +
-                  'Channels available for regular use are reduced by one for each WSPR autorun channel enabled.<br>' +
-                  'Spot decodes available in the Kiwi log (use "Log" tab above) and listed on <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a><br>' +
-                  'The three fields above must be set to valid values for proper spot entry into the <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a> database.'),
-               w3_div('w3-text-red w3-margin-bottom', 'Must restart the KiwiSDR server for changes to have effect.'),
-               w3_inline('w3-restart/w3-margin-right',
-                  w3_select_get_param('|color:red', 'Channel 0', 'WSPR band', 'WSPR.autorun0', wspr_autorun_u, 'admin_select_cb'),
-                  w3_select_get_param('|color:red', 'Channel 1', 'WSPR band', 'WSPR.autorun1', wspr_autorun_u, 'admin_select_cb'),
-                  w3_select_get_param('|color:red', 'Channel 2', 'WSPR band', 'WSPR.autorun2', wspr_autorun_u, 'admin_select_cb'),
-                  w3_select_get_param('|color:red', 'Channel 3', 'WSPR band', 'WSPR.autorun3', wspr_autorun_u, 'admin_select_cb')
+			w3_div('w3-show-inline-block',
+            w3_div('w3-container|width:60%',
+               w3_divs('w3-margin-bottom',
+                  w3_input_get('', 'BFO Hz (multiple of 375 Hz, i.e. 375, 750, 1125, 1500)', 'WSPR.BFO', 'w3_num_set_cfg_cb', '', 'typically 750 Hz'),
+                  w3_input_get('', 'Reporter callsign', 'WSPR.callsign', 'w3_string_set_cfg_cb', ''),
+                  w3_input_get('', w3_label('w3-bold', 'Reporter grid square ') +
+                     w3_div('id-wspr-grid-set cl-admin-check w3-show-inline-block w3-blue w3-btn w3-round-large w3-hide', 'set from GPS'),
+                     'WSPR.grid', 'wspr_input_grid', '', '4 or 6-character grid square location'
+                  )
+               ), ''
+            ),
+            '<hr>',
+            w3_div('w3-container',
+               w3_div('', '<b>Autorun</b>'),
+               w3_div('w3-container',
+                  w3_div('w3-text-black', 'On startup automatically begins running the WSPR decoder on the selected band(s).<br>' +
+                     'Channels available for regular use are reduced by one for each WSPR autorun enabled.<br>' +
+                     'If Kiwi has been configured for a mix of channels with and without waterfalls then channels without waterfalls will be used first.<br><br>' +
+                     
+                     'Spot decodes are available in the Kiwi log (use "Log" tab above) and are listed on <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a><br>' +
+                     'The three fields above must be set to valid values for proper spot entry into the <a href="http://wsprnet.org/drupal/wsprnet/spots" target="_blank">wsprnet.org</a> database.'),
+                  w3_div('w3-text-red w3-margin-bottom', 'Must restart the KiwiSDR server for changes to have effect.'),
+                  w3_inline('id-wspr-admin-autorun w3-restart/')
                )
             )
-			)
-		), 'wspr'
+         )
+		), 'wspr_config'
 	);
+	
+	var s = '';
+	for (var i=0; i < rx_chans; i++) {
+	   s += w3_select_get_param('w3-margin-right|color:red', 'Autorun '+ i, 'WSPR band', 'WSPR.autorun'+ i, wspr_autorun_u, 'admin_select_cb');
+	}
+	w3_innerHTML('id-wspr-admin-autorun', s);
+}
+
+function wspr_config_focus()
+{
+   //console.log('### wspr_config_focus');
+   var el = w3_el('id-wspr-grid-set');
+	if (el) {
+	   el.onclick = function() {
+	      // FIXME
+         //var val = '???';
+         //w3_set_value('WSPR.grid', val);
+         //w3_input_change('WSPR.grid', 'wspr_input_grid');
+      };
+   }
+}
+
+function wspr_config_blur()
+{
+   //console.log('### wspr_config_blur');
 }
 
 var wspr_stop_start_state = 0;
@@ -490,7 +501,7 @@ function wspr_stop_start_cb(path, idx, first)
    }
    
    wspr_stop_start_state ^= 1;
-   w3_button_text(wspr_stop_start_state? 'start' : 'stop', path);
+   w3_button_text(path, wspr_stop_start_state? 'start' : 'stop');
 }
 
 function wspr_reset()

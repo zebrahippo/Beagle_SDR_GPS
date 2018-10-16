@@ -67,9 +67,9 @@ function lms_controls_setup()
                w3_button('w3-padding-smaller', 'SSB #2', 'lms_de_presets_cb', 1)
             ),
             w3_div('w3-section',
-               w3_slider('Delay line', 'lms.de_delay', lms.de_delay, 1, 200, 1, 'lms_delay_cb'),
-               w3_slider('Beta', 'lms.de_beta', lms.de_beta, 0.0001, 0.150, 0.0001, 'lms_beta_cb'),
-               w3_slider('Decay', 'lms.de_decay', lms.de_decay, 0.90, 1.0, 0.0001, 'lms_decay_cb')
+               w3_slider('', 'Delay line', 'lms.de_delay', lms.de_delay, 1, 200, 1, 'lms_delay_cb'),
+               w3_slider('', 'Beta', 'lms.de_beta', lms.de_beta, 0.0001, 0.150, 0.0001, 'lms_beta_cb'),
+               w3_slider('', 'Decay', 'lms.de_decay', lms.de_decay, 0.90, 1.0, 0.0001, 'lms_decay_cb')
             ),
 				w3_inline('w3-margin-between-16',
                w3_checkbox('w3-label-inline w3-text-css-orange/', 'Autonotch', 'lms.autonotch2', lms.autonotch, 'lms_autonotch2_cb'),
@@ -78,9 +78,9 @@ function lms_controls_setup()
                w3_button('w3-padding-smaller', 'Fast CW', 'lms_an_presets_cb', 2)
             ),
             w3_div('w3-section',
-               w3_slider('Delay line', 'lms.an_delay', lms.an_delay, 1, 200, 1, 'lms_delay_cb'),
-               w3_slider('Beta', 'lms.an_beta', lms.an_beta, 0.0001, 0.150, 0.0001, 'lms_beta_cb'),
-               w3_slider('Decay', 'lms.an_decay', lms.an_decay, 0.90, 1.0, 0.0001, 'lms_decay_cb')
+               w3_slider('', 'Delay line', 'lms.an_delay', lms.an_delay, 1, 200, 1, 'lms_delay_cb'),
+               w3_slider('', 'Beta', 'lms.an_beta', lms.an_beta, 0.0001, 0.150, 0.0001, 'lms_beta_cb'),
+               w3_slider('', 'Decay', 'lms.an_decay', lms.an_decay, 0.90, 1.0, 0.0001, 'lms_decay_cb')
             )
 			)
 		);
@@ -118,9 +118,9 @@ var lms_de_presets = [
 function lms_de_presets_cb(path, idx, first)
 {
    var p = lms_de_presets;
-   w3_set_slider('lms.de_delay', p[idx*3], 'lms_delay_cb');
-   w3_set_slider('lms.de_beta', p[idx*3+1], 'lms_beta_cb');
-   w3_set_slider('lms.de_decay', p[idx*3+2], 'lms_decay_cb');
+   w3_slider_set('lms.de_delay', p[idx*3], 'lms_delay_cb');
+   w3_slider_set('lms.de_beta', p[idx*3+1], 'lms_beta_cb');
+   w3_slider_set('lms.de_decay', p[idx*3+2], 'lms_decay_cb');
 }
 
 var lms_an_presets = [
@@ -132,9 +132,9 @@ var lms_an_presets = [
 function lms_an_presets_cb(path, idx, first)
 {
    var p = lms_an_presets;
-   w3_set_slider('lms.an_delay', p[idx*3], 'lms_delay_cb');
-   w3_set_slider('lms.an_beta', p[idx*3+1], 'lms_beta_cb');
-   w3_set_slider('lms.an_decay', p[idx*3+2], 'lms_decay_cb');
+   w3_slider_set('lms.an_delay', p[idx*3], 'lms_delay_cb');
+   w3_slider_set('lms.an_beta', p[idx*3+1], 'lms_beta_cb');
+   w3_slider_set('lms.an_decay', p[idx*3+2], 'lms_decay_cb');
    /*
    w3_menu_items('id-right-click-menu',
       'defaults',
@@ -182,8 +182,8 @@ function lms_denoise_cb(path, checked, first)
    checked = checked? 1:0;
    lms.denoise = checked;
    //console.log('lms_denoise_cb '+ checked);
-   w3_checkbox_value(path, checked);
-   w3_checkbox_value('lms.denoise2', checked);
+   w3_checkbox_set(path, checked);
+   w3_checkbox_set('lms.denoise2', checked);
 	snd_send('SET lms_denoise='+ checked);
 }
 
@@ -192,8 +192,8 @@ function lms_denoise2_cb(path, checked, first)
    checked = checked? 1:0;
    lms.denoise = lms.denoise2 = checked;
    //console.log('lms_denoise2_cb '+ checked);
-   w3_checkbox_value(path, checked);
-   w3_checkbox_value('lms.denoise', checked);
+   w3_checkbox_set(path, checked);
+   w3_checkbox_set('lms.denoise', checked);
 	snd_send('SET lms_denoise='+ checked);
 }
 
@@ -202,8 +202,8 @@ function lms_autonotch_cb(path, checked, first)
    checked = checked? 1:0;
    lms.autonotch = checked;
    //console.log('lms_autonotch_cb '+ checked);
-   w3_checkbox_value(path, checked);
-   w3_checkbox_value('lms.autonotch2', checked);
+   w3_checkbox_set(path, checked);
+   w3_checkbox_set('lms.autonotch2', checked);
 	snd_send('SET lms_autonotch='+ checked);
 }
 
@@ -212,7 +212,7 @@ function lms_autonotch2_cb(path, checked, first)
    checked = checked? 1:0;
    lms.autonotch = lms.autonotch2 = checked;
    //console.log('lms_autonotch2_cb '+ checked);
-   w3_checkbox_value(path, checked);
-   w3_checkbox_value('lms.autonotch', checked);
+   w3_checkbox_set(path, checked);
+   w3_checkbox_set('lms.autonotch', checked);
 	snd_send('SET lms_autonotch='+ checked);
 }

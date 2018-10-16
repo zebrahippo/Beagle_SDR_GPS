@@ -36,6 +36,7 @@ Boston, MA  02110-1301, USA.
 #include "debug.h"
 
 #include <string.h>
+#include <ctype.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -288,7 +289,11 @@ bool index_params_cb(cfg_t *cfg, void *param, jsmntok_t *jt, int seq, int hit, i
 		char *encoded = (char *) malloc(n + SPACE_FOR_NULL);
 		kiwi_strncpy(encoded, s, n + SPACE_FOR_NULL);
 		//printf("index_params_cb: %d %d/%d/%d/%d VAL %s: <%s>\n", n_iparams, seq, hit, lvl, rem, id_last, encoded);
-		iparams_add(id_last, encoded);
+		if (strcmp(id_last, "PAGE_TITLE") == 0 && *encoded == '\0') {
+		    iparams_add(id_last, (char *) "KiwiSDR");
+		} else {
+		    iparams_add(id_last, encoded);
+		}
 		free(id_last);
 		free(encoded);
 	}
@@ -311,7 +316,7 @@ void reload_index_params()
 	cfg_string_free(cs);
 
 	// add the list of extensions
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
 	char *s = extint_list_js();
 	iparams_add("EXT_LIST_JS", kstr_sp(s));
 	kstr_free(s);
@@ -339,6 +344,14 @@ int web_request(struct mg_connection *mc, enum mg_event evt) {
 	if (mc->is_websocket) {
 		// This handler is called for each incoming websocket frame, one or more
 		// times for connection lifetime.
+
+        if ((mc->wsbits & 0x0F) == WS_OPCODE_CLOSE) { // close request from client
+            // respond with a close request to the client
+            // after this close request, the connection is scheduled to be closed
+            mg_websocket_write(mc, WS_OPCODE_CLOSE, mc->content, mc->content_len);
+            return MG_TRUE;
+        }
+
 		char *s = mc->content;
 		int sl = mc->content_len;
 		//printf("WEBSOCKET: len %d uri <%s>\n", sl, mc->uri);
@@ -413,17 +426,24 @@ int web_request(struct mg_connection *mc, enum mg_event evt) {
 		}
 
         // Kiwi URL redirection
-        if (isIndexHTML && rx_server_conns(INCLUDE_INTERNAL) == RX_CHANS) {
-	        char *redirect = (char *) admcfg_string("url_redirect", NULL, CFG_REQUIRED);
-            if (redirect != NULL && *redirect != '\0') {
-                printf("REDIRECT: %s\n", redirect);
+        if (isIndexHTML && (rx_count_server_conns(INCLUDE_INTERNAL) == rx_chans || down)) {
+	        char *url_redirect = (char *) admcfg_string("url_redirect", NULL, CFG_REQUIRED);
+            if (url_redirect != NULL && *url_redirect != '\0') {
+            
+                // if redirect url ends in numeric port number must add '/' before '?' of query string
+                char *sep = (char *) (isdigit(url_redirect[strlen(url_redirect)-1])? "/?" : "?");
+                kstr_t *args = mc->query_string? kstr_cat(sep, mc->query_string) : NULL;
+                kstr_t *redirect = kstr_cat(url_redirect, args);
+                printf("REDIRECT: %s\n", kstr_sp(redirect));
                 mg_send_status(mc, 307);
-                mg_send_header(mc, "Location", redirect);
+                mg_send_header(mc, "Location", kstr_sp(redirect));
                 mg_send_data(mc, NULL, 0);
                 evWS(EC_EVENT, EV_WS, 0, "WEB_SERVER", "307 redirect");
+                kstr_free(redirect);
+                admcfg_string_free(url_redirect);
                 return true;
             }
-            admcfg_string_free(redirect);
+            admcfg_string_free(url_redirect);
         }
 
 		// SECURITY: prevent escape out of local directory

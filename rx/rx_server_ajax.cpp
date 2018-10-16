@@ -177,7 +177,7 @@ char *rx_server_ajax(struct mg_connection *mc)
 		if (sdr_hu_debug)
 			printf("/status: replying to %s\n", remote_ip);
 		
-		const char *s1, *s3, *s4, *s5, *s6;
+		const char *s1, *s3, *s4, *s5, *s6, *s7;
 		
 		// if location hasn't been changed from the default try using DDNS lat/log
 		// or, failing that, put us in Antarctica to be noticed
@@ -230,16 +230,27 @@ char *rx_server_ajax(struct mg_connection *mc)
 		// prevent it from being listed on sdr.hu
 		const char *pwd_s = admcfg_string("user_password", NULL, CFG_REQUIRED);
 		int chan_no_pwd = cfg_int("chan_no_pwd", NULL, CFG_REQUIRED);
+		if (chan_no_pwd >= rx_chans) chan_no_pwd = rx_chans - 1;
+		int users_max = (pwd_s != NULL && *pwd_s != '\0')? chan_no_pwd : rx_chans;
+		int users = MIN(current_nusers, users_max);
+		//printf("STATUS current_nusers=%d users_max=%d users=%d\n", current_nusers, users_max, users);
+
 		bool no_open_access = (pwd_s != NULL && *pwd_s != '\0' && chan_no_pwd == 0);
 		//printf("STATUS user_pwd=%d chan_no_pwd=%d no_open_access=%d\n", *pwd_s != '\0', chan_no_pwd, no_open_access);
 
 		// Advertise whether Kiwi can be publicly listed,
 		// and is available for use
+		//
+		// sdr_hu_reg:	returned status values:
+		//		no		private
+		//		yes		active, offline
+		
+		bool offline = (down || update_in_progress || backup_in_progress);
 		const char *status;
-		if (! sdr_hu_reg)
+		if (!sdr_hu_reg)
 			// Make sure to always keep set to private when private
 			status = "private";
-		else if (down || update_in_progress || backup_in_progress)
+		else if (offline)
 			status = "offline";
 		else
 			status = "active";
@@ -247,11 +258,18 @@ char *rx_server_ajax(struct mg_connection *mc)
 		// the avatar file is in the in-memory store, so it's not going to be changing after server start
 		u4_t avatar_ctime = timer_server_build_unix_time();
 		
-		asprintf(&sb, "status=%s\nname=%s\nsdr_hw=KiwiSDR v%d.%d"
+		int tdoa_ch = cfg_int("tdoa_nchans", NULL, CFG_OPTIONAL);
+		if (tdoa_ch == -1) tdoa_ch = rx_chans;		// has never been set
+		if (!admcfg_bool("GPS_tstamp", NULL, CFG_REQUIRED)) tdoa_ch = -1;
+		
+		asprintf(&sb, "status=%s\noffline=%s\nname=%s\nsdr_hw=KiwiSDR v%d.%d"
 			"%s%s ⁣\n"
-			"op_email=%s\nbands=%.0f-%.0f\nusers=%d\nusers_max=%d\n"
-			"avatar_ctime=%u\ngps=%s\nasl=%d\nloc=%s\nsw_version=%s%d.%d\nantenna=%s\n%suptime=%d\n",
-			status, name, version_maj, version_min,
+			"op_email=%s\nbands=%.0f-%.0f\nusers=%d\nusers_max=%d\navatar_ctime=%u\n"
+			"gps=%s\ngps_good=%d\nfixes=%d\nfixes_min=%d\nfixes_hour=%d\n"
+			"tdoa_id=%s\ntdoa_ch=%d\n"
+			"asl=%d\nloc=%s\n"
+			"sw_version=%s%d.%d\nantenna=%s\n%suptime=%d\n",
+			status, offline? "yes":"no", name, version_maj, version_min,
 			// "nbsp;nbsp;" can't be used here because HTML can't be sent.
 			// So a Unicode "invisible separator" #x2063 surrounded by spaces gets the desired double spacing.
 			(clk.adc_gps_clk_corrections > 8)? " ⁣ 📡 GPS" : "",
@@ -259,9 +277,9 @@ char *rx_server_ajax(struct mg_connection *mc)
 			//gps_default? " [default location set]" : "",
 			(s3 = cfg_string("admin_email", NULL, CFG_OPTIONAL)),
 			(float) sdr_hu_lo_kHz * kHz, (float) sdr_hu_hi_kHz * kHz,
-			current_nusers,
-			(pwd_s != NULL && *pwd_s != '\0')? chan_no_pwd : RX_CHANS,
-			avatar_ctime, gps_loc,
+			users, users_max, avatar_ctime,
+			gps_loc, gps.good, gps.fixes, gps.fixes_min, gps.fixes_hour,
+			(s7 = cfg_string("tdoa_id", NULL, CFG_OPTIONAL)), tdoa_ch,
 			cfg_int("rx_asl", NULL, CFG_OPTIONAL),
 			s5,
 			"KiwiSDR_v", version_maj, version_min,
@@ -270,12 +288,13 @@ char *rx_server_ajax(struct mg_connection *mc)
 			timer_sec()
 			);
 
-		if (name) free(name);
-		if (ddns_lat_lon) free(ddns_lat_lon);
+		free(name);
+		free(ddns_lat_lon);
 		cfg_string_free(s3);
 		cfg_string_free(s4);
 		cfg_string_free(s5);
 		cfg_string_free(s6);
+		cfg_string_free(s7);
 		cfg_string_free(pwd_s);
 
 		//printf("STATUS REQUESTED from %s: <%s>\n", mc->remote_ip, sb);

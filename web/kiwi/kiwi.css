@@ -66,7 +66,7 @@ hr
 }
 
 
-#id-time-display-logo-inner
+.id-time-display-logo-inner
 {
 	opacity: 0;
 	transition: opacity 1s linear;
@@ -79,7 +79,7 @@ hr
 	right: 15px;
 }
 
-#id-time-display-logo-text
+.id-time-display-logo-text
 {
 	position: absolute;
 	top: 2pt;
@@ -90,12 +90,12 @@ hr
 	text-align: center;
 }
 
-#id-time-display-inner
+.id-time-display-inner
 {
 	transition: opacity 1s linear;
 }
 
-#id-time-display-text-inner
+.id-time-display-text-inner
 {
 	position: absolute;
 	top: 1pt;
@@ -201,7 +201,8 @@ hr
 }
 
 /* override the w3-sidenav select/hover styles */
-.id-admin-nav-dom > .w3int-cur-sel, .id-admin-nav-dom > .w3int-cur-sel:hover
+.id-admin-nav-dom > .w3int-cur-sel, .id-admin-nav-dom > .w3int-cur-sel:hover,
+.id-fw-nav > .w3int-cur-sel, .id-fw-nav > .w3int-cur-sel:hover
 {
     color: white;
     background-color: #4CAF50;  /* select green */
@@ -356,6 +357,12 @@ hr
 	right: auto;
 }
 
+.fa-stack > .fa-nudge-down
+{
+	top: 5%;
+	bottom: auto;
+}
+
 
 /* text-security */
 
@@ -364,3 +371,34 @@ input.kiwi-pw
     font-family: text-security-disc;
 }
 
+
+/* gmap marker cluster icons */
+
+.cl-tdoa-cluster-base
+{
+    height: 25px;
+    line-height: 1;
+    width: 25px;
+    padding: 6px 2px;
+    margin: 10px;
+    text-align: center;
+    cursor: pointer;
+    position: absolute;
+    border-radius: 50%;
+    font-size: 1em;
+    font-weight: bold;
+}
+
+.cl-tdoa-cluster-kiwi
+{
+    color: white;
+    background: blue;
+    border: 2px solid red;
+}
+
+.cl-tdoa-cluster-refs
+{
+    color: black;
+    background: white;
+    border: 2px solid lime;
+}

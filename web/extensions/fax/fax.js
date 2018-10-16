@@ -118,6 +118,8 @@ function fax_recv(data)
             var file = kiwi_url_origin() +'/kiwi.config/fax.ch'+ fax.ch;
             var png = file +'.png';
             var thumb = file +'.thumb.png';
+            w3_remove_then_add('id-fax-file-icon1', 'fa-circle-o-notch fa-refresh fa-spin w3-text-aqua', 'fa-circle w3-text-pink');
+            w3_add('id-fax-file-icon2', 'w3-hide');
             w3_el('id-fax-file-status').innerHTML =
                w3_link('', png, '<img src='+ dq(thumb) +' />');
 				break;
@@ -276,23 +278,25 @@ function fax_controls_setup()
 					w3_button('', 'Stop', 'fax_stop_start_cb'),
 					w3_button('', 'Clear', 'fax_clear_cb'),
 					w3_inline('',
-                  w3_icon('id-fax-file-play', 'fa-play-circle', 32, 'lime', 'fax_file_cb'),
-                  w3_icon('id-fax-file-stop', 'fa-stop-circle-o', 32, 'red', 'fax_file_cb'),
-                  w3_inline('id-fax-file-status w3-margin-left/')
+                  w3_div('',
+                     w3_div('fa-stack',
+                        w3_icon('id-fax-file-icon1', 'fa-circle fa-nudge-down fa-stack-2x w3-text-pink', 22, '', 'fax_file_cb'),
+                        w3_icon('id-fax-file-icon2', 'fa-stop fa-stack-1x w3-text-pink w3-hide', 10, '', 'fax_file_cb')
+                     )
+                  ),
+                  w3_div('id-fax-file-status w3-margin-left')
                )
             ),
 				w3_div('',
                w3_link('', 'www.nws.noaa.gov/os/marine/rfax.pdf', 'FAX transmission schedules'),
                w3_div('', 'Shift-click (PC) or touch (mobile) the image to align.'),
                w3_div('', 'Please <a href="javascript:sendmail(\'pvsslqwChjtjpgq-`ln\');">report</a> corrections/updates to station frequency menus.')
-               //w3_slider('Contrast', 'fax.contrast', fax.contrast, 1, 255, 1, 'fax_contrast_cb')
+               //w3_slider('', 'Contrast', 'fax.contrast', fax.contrast, 1, 255, 1, 'fax_contrast_cb')
             )
 			)
       );
 
 	ext_panel_show(controls_html, data_html, null);
-   w3_show_inline('id-fax-file-play');
-   w3_hide('id-fax-file-stop');
    time_display_setup('fax');
 
 	fax.data_canvas = w3_el('id-fax-data-canvas');
@@ -310,7 +314,7 @@ function fax_controls_setup()
    ext_set_data_height(fax_h);
    fax_clear_display();
    
-   // no fax_resize() used because id-fax-data uses left:0 and the canvas begins at the window left edge
+   // no dynamic resize used because id-fax-data uses left:0 and the canvas begins at the window left edge
 
    ext_set_controls_width_height(550, 200);
    
@@ -468,35 +472,38 @@ function fax_stop_start_cb(path, idx, first)
 {
 	ext_send('SET '+ (fax_stop_start_state? 'fax_start' : 'fax_stop'));
    fax_stop_start_state ^= 1;
-   w3_button_text(fax_stop_start_state? 'Start' : 'Stop', path);
+   w3_button_text(path, fax_stop_start_state? 'Start' : 'Stop');
 	//fax_file_cb(0, 0, 0);
 }
 
 function fax_clear_cb()
 {
    fax_clear_display();
-   if (!fax.file)
+   if (!fax.file) {
+      w3_remove_then_add('id-fax-file-icon1', 'fa-circle-o-notch fa-refresh fa-spin w3-text-aqua', 'fa-circle  w3-text-pink');
+      w3_add('id-fax-file-icon2', 'w3-hide');
       w3_el('id-fax-file-status').innerHTML = '';
+   }
 }
 
 function fax_file_cb(path, param, first)
 {
    fax.file ^= 1;
    //console.log('flip fax.file='+ fax.file);
+   var el1 = w3_el('id-fax-file-icon1');
+   var el2 = w3_el('id-fax-file-icon2');
    
    if (fax.file) {
 	   ext_send('SET fax_file_open');
-	   w3_hide('id-fax-file-play');
-	   w3_show_inline('id-fax-file-stop');
+      w3_remove_then_add(el1, 'fa-circle', 'fa-circle-o-notch fa-spin');
+      w3_remove(el2, 'w3-hide');
       w3_el('id-fax-file-status').innerHTML =
-         w3_div('w3-show-inline-block', 'recording<br>line '+ w3_div('id-fax-line w3-show-inline-block')) +
-         w3_icon('|margin-left:8px;', 'fa-refresh fa-spin', 20, 'lime');
+         w3_div('w3-show-inline-block', 'recording<br>line '+ w3_div('id-fax-line w3-show-inline-block'));
 	} else {
 	   ext_send('SET fax_file_close');
-	   w3_show_inline('id-fax-file-play');
-	   w3_hide('id-fax-file-stop');
-      w3_el('id-fax-file-status').innerHTML = 'processing '+
-         w3_icon('|margin-left:8px;', 'fa-refresh fa-spin', 20, 'cyan');
+      w3_remove_then_add(el1, 'fa-circle-o-notch w3-text-pink', 'fa-refresh fa-spin w3-text-aqua');
+      w3_add(el2, 'w3-hide');
+      w3_el('id-fax-file-status').innerHTML = 'processing';
 	}
 }
 
@@ -512,13 +519,7 @@ function fax_config_html()
 	ext_admin_config(fax_ext_name, 'fax',
 		w3_div('id-fax w3-text-teal w3-hide',
 			'<b>FAX configuration</b>' +
-			'<hr>' +
-			w3_third('', 'w3-container',
-				w3_divs('w3-margin-bottom',
-					w3_input_get('', 'int1', 'fax.int1', 'w3_num_cb'),
-					w3_input_get('', 'int2', 'fax.int2', 'w3_num_cb')
-				), '', ''
-			)
+			'<hr>'
 		)
 	);
 }

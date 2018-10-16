@@ -1,10 +1,20 @@
 // Copyright (c) 2016 John Seamons, ZL/KF6VO
 
+var extint = {
+   ws: null,
+   param: null,
+   displayed: false,
+   help_displayed: false,
+   current_ext_name: null,
+   using_data_container: false,
+};
+
 function ext_switch_to_client(ext_name, first_time, recv_func)
 {
 	//console.log('SET ext_switch_to_client='+ ext_name +' first_time='+ first_time +' rx_chan='+ rx_chan);
 	recv_websocket(extint.ws, recv_func);		// change recv callback with each ext activation
 	ext_send('SET ext_switch_to_client='+ ext_name +' first_time='+ (first_time? 1:0) +' rx_chan='+ rx_chan);
+	w3_call(ext_name +'_focus');
 }
 
 function ext_send(msg, ws)
@@ -108,11 +118,15 @@ var ext_zoom = {
 
 var extint_ext_is_tuning = false;
 
-function ext_tune(fdsp, mode, zoom, zoom_level) {		// specifying mode is optional
+// mode, zoom and passband are optional
+function ext_tune(fdsp, mode, zoom, zoom_level, low_cut, high_cut) {
 	//console.log('ext_tune: '+ fdsp +', '+ mode +', '+ zoom +', '+ zoom_level);
 	
 	extint_ext_is_tuning = true;
       freqmode_set_dsp_kHz(fdsp, mode);
+      
+      if (low_cut != undefined && high_cut != undefined)
+      ext_set_passband(low_cut, high_cut);
       
       if (zoom != undefined) {
          zoom_step(zoom, zoom_level);
@@ -122,14 +136,29 @@ function ext_tune(fdsp, mode, zoom, zoom_level) {		// specifying mode is optiona
 	extint_ext_is_tuning = false;
 }
 
+function ext_get_freq_Hz()
+{
+	return { displayed: freq_displayed_Hz, carrier: freq_car_Hz, passband_center: freq_passband_center() };
+}
+
 function ext_get_freq()
 {
 	return freq_displayed_Hz;
 }
 
+function ext_get_freq_kHz()
+{
+	return (freq_displayed_Hz/1e3).toFixed(2);
+}
+
 function ext_get_carrier_freq()
 {
 	return freq_car_Hz;
+}
+
+function ext_get_passband_center_freq()
+{
+   return freq_passband_center();
 }
 
 function ext_get_mode()
@@ -139,6 +168,7 @@ function ext_get_mode()
 
 function ext_set_mode(mode)
 {
+   //console.log('### ext_set_mode '+ mode);
 	demodulator_analog_replace(mode);
 }
 
@@ -189,6 +219,24 @@ function ext_set_passband(low_cut, high_cut, set_mode_pb, fdsp)		// specifying f
 function ext_get_zoom()
 {
 	return zoom_level;
+}
+
+extint.optbars = {
+   'optbar-wf':0, 'optbar-audio':1, 'optbar-agc':2, 'optbar-users':3, 'optbar-status':4, 'optbar-off':5
+};
+
+function ext_get_optbar()
+{
+   var optbar = readCookie('last_optbar');      // optbar-xxx
+   return optbar;
+}
+
+function ext_set_optbar(optbar)
+{
+   if (extint.optbars[optbar]) {
+      writeCookie('last_optbar', optbar);
+      w3_el('id-nav-'+ optbar).click();
+   }
 }
 
 
@@ -317,15 +365,6 @@ function ext_panel_set_name(name)
 // internal routines
 ////////////////////////////////
 
-var extint = {
-   ws: null,
-   param: null,
-   displayed: false,
-   help_displayed: false,
-   current_ext_name: null,
-   using_data_container: false,
-};
-
 function ext_panel_init()
 {
    w3_el('id-panels-container').innerHTML +=
@@ -364,8 +403,8 @@ function extint_panel_show(controls_html, data_html, show_func)
 	//console.log('extint_panel_show using_data_container='+ extint.using_data_container);
 
 	if (extint.using_data_container) {
-		w3_hide('id-top-container');
 		toggle_or_set_spec(toggle_e.SET, 0);
+		w3_hide('id-top-container');
 		w3_show_block(w3_innerHTML('id-ext-data-container', data_html));
 	} else {
 		w3_hide('id-ext-data-container');
@@ -388,10 +427,12 @@ function extint_panel_show(controls_html, data_html, show_func)
 	el.style.zIndex = 150;
 	//el.style.top = px((extint.using_data_container? height_spectrum_canvas : height_top_bar_parts) +157+10);
 	w3_visible(el, true);
+   toggle_or_set_hide_panels(0);    // cancel panel hide mode
+
 	
 	// help button
 	var show_help_button = w3_call(extint.current_ext_name +'_help', false);
-   w3_attr('id-ext-controls-help-btn', 'w3-disabled', !show_help_button);
+   w3_set_props('id-ext-controls-help-btn', 'w3-disabled', !show_help_button);
 	
 	extint.displayed = true;
 }
@@ -436,10 +477,37 @@ function extint_help_click()
 
 function extint_environment_changed(changed)
 {
-	if (extint.current_ext_name) {
-	   w3_call(extint.current_ext_name +'_environment_changed', changed);
-	}
+   // have to wait a bit since extint_environment_changed({freq:1}) is called before
+   // e.g. ext_get_freq_kHz() has been updated with latest value
+   
+   setTimeout(
+      function() {
+         if (extint.current_ext_name) {
+            w3_call(extint.current_ext_name +'_environment_changed', changed);
+         }
+
+         // for benefit of programs like CATSync that use injected javascript to catch events
+         w3_call('injection_environment_changed', changed);
+      }, 100
+   );
 }
+
+/*
+var iec_seq = 0;
+function injection_environment_changed(changed)
+{
+   console.log('injection_environment_changed '+ iec_seq +': '+
+      (changed.freq? 'FREQ ':'') +
+      (changed.passband? 'PASSBAND ':'') +
+      (changed.mode? 'MODE ':'') +
+      (changed.zoom? 'ZOOM ':'') +
+      (changed.resize? 'RESIZE ':'')
+   );
+   console.log('ext_get_freq_kHz='+ ext_get_freq_kHz());
+   iec_seq++;
+   //kiwi_trace();
+}
+*/
 
 var extint_pwd_cb = null;
 var extint_pwd_cb_param = null;

@@ -497,7 +497,7 @@ static float Correlate(int sat, const fftwf_complex *data, int *max_snr_dop, int
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 
-void SearchEnable(int ch, int sat, bool restart) {
+void SearchEnable(int sat) {
     Sats[sat].busy = false;
 }
 
@@ -549,16 +549,9 @@ void SearchTask(void *param) {
                 case E1B: codegen_init = E1B_MODE | (sp->prn-1); break;
             }
 
-            #if GALILEO_CHANS == 0
-                while ((ch = ChanReset(sat, codegen_init)) < 0) {   // all channels busy?
-                    TaskSleepMsec(1000);
-                    //NextTask("all chans busy");
-                }
-            #else
-                if ((ch = ChanReset(sat, codegen_init)) < 0) {      // all channels busy?
-                    continue;
-                }
-            #endif
+            if ((ch = ChanReset(sat, codegen_init)) < 0) {      // all channels busy?
+                continue;
+            }
 			
 			if ((last_ch != ch) && (snr < min_sig)) GPSstat(STAT_SAT, 0, last_ch, -1, 0, 0);
 
@@ -607,7 +600,7 @@ bool SearchTaskRun()
 	if (searchTaskID == -1) return false;
 	
 	bool start = false;
-	int users = rx_server_conns(EXTERNAL_ONLY);
+	int users = rx_count_server_conns(EXTERNAL_ONLY);
 	
 	// startup: no clock corrections done yet
 	if (clk.adc_gps_clk_corrections == 0) start = true;
@@ -641,7 +634,7 @@ bool SearchTaskRun()
 		//printf("SearchTaskRun: $wakeup\n");
 		gps_acquire = 1;
 		GPSstat(STAT_ACQUIRE, 0, gps_acquire);
-		TaskWakeup(searchTaskID, FALSE, 0);
+		TaskWakeup(searchTaskID, TWF_NONE, 0);
 	}
 	
 	return enable;

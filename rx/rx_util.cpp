@@ -177,6 +177,11 @@ void update_vars_from_config()
     cfg_default_string("index_html_params.HTML_HEAD", "", &update_cfg);
     cfg_default_string("tlimit_exempt_pwd", "", &update_cfg);
     cfg_default_bool("ext_ADC_clk", false, &update_cfg);
+    cfg_default_int("ext_ADC_freq", (int) round(ADC_CLOCK_TYP), &update_cfg);
+    cfg_default_bool("ADC_clk_corr", true, &update_cfg);
+    cfg_default_string("tdoa_id", "", &update_cfg);
+    cfg_default_int("tdoa_nchans", -1, &update_cfg);
+    cfg_default_bool("no_wf", false, &update_cfg);
     
     // fix corruption left by v1.131 dotdot bug
     _cfg_int(&cfg_cfg, "WSPR.autorun", &err, CFG_OPTIONAL|CFG_NO_DOT);
@@ -214,6 +219,8 @@ void update_vars_from_config()
     admcfg_default_int("E1B_offset", 4, &update_admcfg);
     admcfg_default_bool("plot_E1B", false, &update_admcfg);
     admcfg_default_string("url_redirect", "", &update_admcfg);
+    admcfg_default_bool("GPS_tstamp", true, &update_admcfg);
+    admcfg_default_int("firmware_sel", 0, &update_admcfg);
 
     // FIXME: resolve problem of ip_address.xxx vs ip_address:{xxx} in .json files
     //admcfg_default_bool("ip_address.use_static", false, &update_admcfg);
@@ -279,6 +286,7 @@ static bool geoloc_json(conn_t *conn, const char *geo_host_ip_s, const char *cou
     geo = kstr_cat(geo, country);   // NB: country freed here
 
     clprintf(conn, "GEOLOC: %s <%s>\n", geo_host_ip_s, kstr_sp(geo));
+	free(conn->geo);
     conn->geo = strdup(kstr_sp(geo));
     kstr_free(geo);
 
@@ -320,8 +328,11 @@ void webserver_collect_print_stats(int print)
 	conn_t *c;
 	
 	// print / log connections
-	for (c=conns; c < &conns[N_CONNS]; c++) {
-		if (!(c->valid && c->type == STREAM_SOUND && c->arrived)) continue;
+    rx_chan_t *rx;
+    for (rx = rx_channels; rx < &rx_channels[rx_chans]; rx++) {
+        if (!rx->busy) continue;
+		c = rx->conn_snd;
+		assert(c != NULL);
 		
 		u4_t now = timer_sec();
 		if (c->freqHz != c->last_freqHz || c->mode != c->last_mode || c->zoom != c->last_zoom) {
@@ -339,8 +350,10 @@ void webserver_collect_print_stats(int print)
 			
 			//cprintf(c, "TO_MINS=%d exempt=%d\n", inactivity_timeout_mins, c->tlimit_exempt);
 			if (!c->inactivity_timeout_override && (inactivity_timeout_mins != 0) && !c->tlimit_exempt) {
+			    if (c->last_tune_time == 0) c->last_tune_time = now;    // got here before first set in rx_loguser()
 				diff = now - c->last_tune_time;
-			    //cprintf(c, "diff=%d TO_SECS=%d\n", diff, MINUTES_TO_SEC(inactivity_timeout_mins));
+			    //cprintf(c, "diff=%d now=%d last=%d TO_SECS=%d\n", diff, now, c->last_tune_time,
+			    //    MINUTES_TO_SEC(inactivity_timeout_mins));
 				if (diff > MINUTES_TO_SEC(inactivity_timeout_mins)) {
                     cprintf(c, "TLIMIT-INACTIVE for %s\n", c->remote_ip);
 					send_msg(c, false, "MSG inactivity_timeout=%d", inactivity_timeout_mins);
@@ -412,7 +425,7 @@ void webserver_collect_print_stats(int print)
 	audio_kbps = audio_bytes*k;
 	waterfall_kbps = waterfall_bytes*k;
 	
-	for (i=0; i <= RX_CHANS; i++) {
+	for (i=0; i <= rx_chans; i++) {
 		waterfall_fps[i] = waterfall_frames[i]/10.0;
 		waterfall_frames[i] = 0;
 	}

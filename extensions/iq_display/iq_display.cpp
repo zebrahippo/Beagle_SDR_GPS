@@ -19,7 +19,7 @@
 //#define IQ_DISPLAY_DEBUG_MSG  true
 #define IQ_DISPLAY_DEBUG_MSG    false
 
-// rx_chan is the receiver channel number we've been assigned, 0..RX_CHAN
+// rx_chan is the receiver channel number we've been assigned, 0..rx_chans
 // We need this so the extension can support multiple users, each with their own iq_display[] data structure.
 
 #define IQ_POINTS       0
@@ -104,7 +104,8 @@ public:
         _nsamp += nsamps;
         if (_nsamp > _maNsend) {
             float df = _exponent? _df/(2*M_PI*_exponent) : 0;
-            ext_send_msg(_rx_chan, IQ_DISPLAY_DEBUG_MSG, "EXT cmaI=%e cmaQ=%e df=%e", _cma.real(), _cma.imag(), df);
+            ext_send_msg(_rx_chan, IQ_DISPLAY_DEBUG_MSG, "EXT cmaI=%e cmaQ=%e df=%e adc_clock=%.0f",
+                _cma.real(), _cma.imag(), df, adc_clock_system());
             _nsamp -= _maNsend;
         }
     }
@@ -221,7 +222,7 @@ private:
     float _ud;         //
 } ;
 
-std::array<iq_display::sptr, RX_CHANS> iqs;
+std::array<iq_display::sptr, MAX_RX_CHANS> iqs;
 
 void iq_display_data(int rx_chan, int ch, int nsamps, TYPECPX *samps)
 {

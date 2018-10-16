@@ -34,7 +34,7 @@ struct s4285_t {
 	u1_t map[N_IQ_RING][NIQ];
 };
 
-static s4285_t s4285[RX_CHANS];
+static s4285_t s4285[MAX_RX_CHANS];
 
 #define	MODE_RX				0
 #define	MODE_TX_LOOPBACK	1
@@ -89,7 +89,7 @@ void s4285_data(int rx_chan, int ch, int nsamps, TYPEMONO16 *samps)
 	if (e->mode == MODE_TX_LOOPBACK) {
 		//m_CSt4285[rx_chan].getTxOutput((void *) samps, nsamps, TYPE_IQ_F32_DATA, K_AMPMAX);
 		m_CSt4285[rx_chan].getTxOutput((void *) samps, nsamps, TYPE_REAL_S16_DATA, K_AMPMAX);
-		if (e->rx_task) TaskWakeup(e->rx_task, TRUE, e->rx_chan);
+		if (e->rx_task) TaskWakeup(e->rx_task, TWF_CHECK_WAKING, e->rx_chan);
 	} else {
 		#if 0
 		static u4_t last_time;
@@ -108,7 +108,7 @@ void s4285_data(int rx_chan, int ch, int nsamps, TYPEMONO16 *samps)
 			s4285_rx_count_max = s4285_rx_count;
 		}
 		assert(s4285_rx_count < N_RXBLKS);
-		if (e->rx_task) TaskWakeup(e->rx_task, TRUE, e->rx_chan);
+		if (e->rx_task) TaskWakeup(e->rx_task, TWF_CHECK_WAKING, e->rx_chan);
 	}
 }
 

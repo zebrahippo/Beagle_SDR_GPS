@@ -36,7 +36,7 @@ Boston, MA  02110-1301, USA.
 #include "debug.h"
 #include "ext_int.h"
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
  #include "data_pump.h"
  #include "dx.h"
 #endif
@@ -52,8 +52,8 @@ Boston, MA  02110-1301, USA.
 #include <fftw3.h>
 
 char *cpu_stats_buf;
-volatile float audio_kbps, waterfall_kbps, waterfall_fps[RX_CHANS+1], http_kbps;
-volatile int audio_bytes, waterfall_bytes, waterfall_frames[RX_CHANS+1], http_bytes;
+volatile float audio_kbps, waterfall_kbps, waterfall_fps[MAX_RX_CHANS+1], http_kbps;
+volatile int audio_bytes, waterfall_bytes, waterfall_frames[MAX_RX_CHANS+1], http_bytes;
 char *current_authkey;
 int debug_v;
 bool auth_su;
@@ -249,7 +249,8 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
         }
 
 		int chan_no_pwd = cfg_int("chan_no_pwd", NULL, CFG_REQUIRED);
-		int chan_need_pwd = RX_CHANS - chan_no_pwd;
+		if (chan_no_pwd >= rx_chans) chan_no_pwd = rx_chans - 1;
+		int chan_need_pwd = rx_chans - chan_no_pwd;
 
 		if (type_kiwi) {
 			pwd_s = admcfg_string("user_password", NULL, CFG_REQUIRED);
@@ -270,7 +271,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 				allow = true;
 			} else {
 			
-				int rx_free = rx_chan_free(NULL);
+				int rx_free = rx_chan_free(true, NULL);
 				
 				// allow with no password if minimum number of channels needing password remains
 				// if no password has been set at all we've already allowed access above
@@ -367,7 +368,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 			}
 		}
 		
-		send_msg(conn, false, "MSG rx_chans=%d", RX_CHANS);
+		send_msg(conn, false, "MSG rx_chans=%d", rx_chans);
 		send_msg(conn, false, "MSG chan_no_pwd=%d", chan_no_pwd);
 		send_msg(conn, false, "MSG badp=%d", badp);
 
@@ -478,7 +479,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 // dx
 ////////////////////////////////
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
 
 #define DX_SPACING_ZOOM_THRESHOLD	5
 #define DX_SPACING_THRESHOLD_PX		10
@@ -704,7 +705,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 
 	if (strcmp(cmd, "SET GET_CONFIG") == 0) {
 		asprintf(&sb, "{\"r\":%d,\"g\":%d,\"s\":%d,\"pu\":\"%s\",\"pe\":%d,\"pv\":\"%s\",\"pi\":%d,\"n\":%d,\"m\":\"%s\",\"v1\":%d,\"v2\":%d}",
-			RX_CHANS, GPS_CHANS, ddns.serno, ddns.ip_pub, ddns.port_ext, ddns.ip_pvt, ddns.port, ddns.nm_bits, ddns.mac, version_maj, version_min);
+			rx_chans, GPS_CHANS, ddns.serno, ddns.ip_pub, ddns.port_ext, ddns.ip_pvt, ddns.port, ddns.nm_bits, ddns.mac, version_maj, version_min);
 		send_msg(conn, false, "MSG config_cb=%s", sb);
 		free(sb);
 		return true;
@@ -713,14 +714,14 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 	if (kiwi_str_begins_with(cmd, "SET STATS_UPD")) {
 		int ch;
 		n = sscanf(cmd, "SET STATS_UPD ch=%d", &ch);
-		if (n != 1 || ch < 0 || ch > RX_CHANS) return true;
+		if (n != 1 || ch < 0 || ch > rx_chans) return true;
 
 		rx_chan_t *rx;
 		int underruns = 0, seq_errors = 0;
 		n = 0;
 		//n = snprintf(oc, rem, "{\"a\":["); oc += n; rem -= n;
 		
-		for (rx = rx_channels, i=0; rx < &rx_channels[RX_CHANS]; rx++, i++) {
+		for (rx = rx_channels, i=0; rx < &rx_channels[rx_chans]; rx++, i++) {
 			if (rx->busy) {
 				conn_t *c = rx->conn_snd;
 				if (c && c->valid && c->arrived && c->user != NULL) {
@@ -739,19 +740,19 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 
 		float sum_kbps = audio_kbps + waterfall_kbps + http_kbps;
 		asprintf(&sb2, "\"aa\":%.0f,\"aw\":%.0f,\"af\":%.0f,\"at\":%.0f,\"ah\":%.0f,\"as\":%.0f",
-			audio_kbps, waterfall_kbps, waterfall_fps[ch], waterfall_fps[RX_CHANS], http_kbps, sum_kbps);
+			audio_kbps, waterfall_kbps, waterfall_fps[ch], waterfall_fps[MAX_RX_CHANS], http_kbps, sum_kbps);
 		sb = kstr_cat(sb, kstr_wrap(sb2));
 
 		asprintf(&sb2, ",\"ga\":%d,\"gt\":%d,\"gg\":%d,\"gf\":%d,\"gc\":%.6f,\"go\":%d",
 			gps.acquiring, gps.tracking, gps.good, gps.fixes, adc_clock_system()/1e6, clk.adc_gps_clk_corrections);
 		sb = kstr_cat(sb, kstr_wrap(sb2));
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
 		extern int audio_dropped;
 		asprintf(&sb2, ",\"ad\":%d,\"au\":%d,\"ae\":%d,\"ar\":%d,\"an\":%d,\"ap\":[",
-			audio_dropped, underruns, seq_errors, dpump_resets, NRX_BUFS);
+			audio_dropped, underruns, seq_errors, dpump_resets, nrx_bufs);
 		sb = kstr_cat(sb, kstr_wrap(sb2));
-		for (i = 0; i < NRX_BUFS; i++) {
+		for (i = 0; i < nrx_bufs; i++) {
 		    asprintf(&sb2, "%s%d", (i != 0)? ",":"", dpump_hist[i]);
 		    sb = kstr_cat(sb, kstr_wrap(sb2));
 		}
@@ -764,7 +765,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		utc_s[5] = '\0';
 		if (utc_offset != -1 && dst_offset != -1) {
 			time_t local = utc + utc_offset + dst_offset;
-			strncpy(local_s, &utc_ctime()[11], 5);
+			strncpy(local_s, &var_ctime(&local)[11], 5);
 			local_s[5] = '\0';
 		} else {
 			strcpy(local_s, "");
@@ -781,7 +782,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		return true;
 	}
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
 
 	if (strcmp(cmd, "SET GET_USERS") == 0) {
 		rx_chan_t *rx;
@@ -789,12 +790,12 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		sb = (char *) "[";
 		bool isAdmin = (conn->type == STREAM_ADMIN);
 		
-		for (rx = rx_channels, i=0; rx < &rx_channels[RX_CHANS]; rx++, i++) {
+		for (rx = rx_channels, i=0; rx < &rx_channels[rx_chans]; rx++, i++) {
 			n = 0;
 			if (rx->busy) {
 				conn_t *c = rx->conn_snd;
 				if (c && c->valid && c->arrived && c->user != NULL) {
-					assert(c->type == STREAM_SOUND);
+					assert(c->type == STREAM_SOUND || c->type == STREAM_WATERFALL);
 					u4_t now = timer_sec();
 					u4_t t = now - c->arrival;
 					u4_t sec = t % 60; t /= 60;
@@ -842,7 +843,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		if (conn->mc == NULL) return true;	// we've seen this
 		if (noname && !conn->user) setUserIP = true;
 		if (noname && conn->user && strcmp(conn->user, conn->remote_ip)) setUserIP = true;
-
+		
 		if (setUserIP) {
 			kiwi_str_redup(&conn->user, "user", conn->remote_ip);
 			conn->isUserIP = TRUE;
@@ -864,6 +865,21 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 			conn->arrived = TRUE;
 		}
 		
+		// Can only distinguish the TDoA service at the time the kiwirecorder identifies itself.
+		// If a match and the limit is exceeded then kick the connection off immediately.
+		// This identification is typically sent right after initial connection is made.
+		if (kiwi_str_begins_with(conn->user, "TDoA_service")) {
+		    int tdoa_ch = cfg_int("tdoa_nchans", NULL, CFG_REQUIRED);
+		    if (tdoa_ch == -1) tdoa_ch = rx_chans;      // has never been set
+		    int tdoa_users = rx_count_server_conns(TDOA_USERS);
+		    //cprintf(conn, "TDoA_service tdoa_users=%d > tdoa_ch=%d\n", tdoa_users, tdoa_ch);
+		    if (tdoa_users > tdoa_ch) {
+		        //cprintf(conn, "TDoA_service TOO_BUSY\n");
+			    send_msg(conn, SM_NO_DEBUG, "MSG too_busy=%d", tdoa_ch);
+		        conn->kick = true;
+		    }
+		}
+
 		free(ident_user_m);
 		return true;
 	}
@@ -905,13 +921,13 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 		return true;
 	}
 	
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
     // used by signal generator etc.
 	int wf_comp;
 	n = sscanf(cmd, "SET wf_comp=%d", &wf_comp);
 	if (n == 1) {
 		c2s_waterfall_compression(conn->rx_channel, wf_comp? true:false);
-		printf("### SET wf_comp=%d\n", wf_comp);
+		//printf("### SET wf_comp=%d\n", wf_comp);
 		return true;
 	}
 #endif
@@ -980,7 +996,7 @@ bool rx_common_cmd(const char *stream_name, conn_t *conn, char *cmd)
 	int inactivity_timeout;
 	n = sscanf(cmd, "SET OVERRIDE inactivity_timeout=%d", &inactivity_timeout);
 	if (n == 1) {
-		clprintf(conn, "SET OVERRIDE inactivity_timeout=%d\n", inactivity_timeout);
+		//clprintf(conn, "SET OVERRIDE inactivity_timeout=%d\n", inactivity_timeout);
 		if (inactivity_timeout == 0)
 			conn->inactivity_timeout_override = true;
 		return true;

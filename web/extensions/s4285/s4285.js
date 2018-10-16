@@ -162,9 +162,9 @@ function s4285_controls_setup()
 			w3_divs('w3-container/w3-tspace-8',
 				w3_div('w3-medium w3-text-aqua', '<b>STANAG 4285 decoder</b>'),
 				w3_select('', 'Mode', '', 's4285.mode', s4285.mode, mode_s, 's4285_mode_select_cb'),
-				w3_slider('Gain', 's4285.gain', s4285.gain, 0, 100, 1, 's4285_gain_cb'),
+				w3_slider('', 'Gain', 's4285.gain', s4285.gain, 0, 100, 1, 's4285_gain_cb'),
 				w3_select('', 'Draw', '', 's4285.draw', s4285.draw, draw_s, 's4285_draw_select_cb'),
-				w3_slider('Points', 's4285.points', s4285.points, 4, 14, 1, 's4285_points_cb'),
+				w3_slider('', 'Points', 's4285.points', s4285.points, 4, 14, 1, 's4285_points_cb'),
 				w3_button('', 'Clear', 's4285_clear_cb'),
 				w3_div('w3-text-aqua',
 					'<b>Status:</b>',
@@ -175,7 +175,7 @@ function s4285_controls_setup()
 
 	ext_panel_show(controls_html, data_html, null);
 	time_display_setup('s4285');
-	s4285_resize();
+	s4285_environment_changed( {resize:1} );
 
 	s4285_canvas = w3_el('id-s4285-canvas');
 	s4285_canvas.ctx = s4285_canvas.getContext("2d");
@@ -189,8 +189,9 @@ function s4285_controls_setup()
 	s4285_clear();
 }
 
-function s4285_resize()
+function s4285_environment_changed(changed)
 {
+   if (!changed.resize) return;
 	var el = w3_el('id-s4285-data');
 	var left = (window.innerWidth - 200 - time_display_width()) / 2;
 	el.style.left = px(left);

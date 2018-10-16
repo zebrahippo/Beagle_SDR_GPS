@@ -37,7 +37,7 @@ Boston, MA  02110-1301, USA.
 #include "clk.h"
 #include "non_block.h"
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
  #include "data_pump.h"
  #include "ext_int.h"
 #endif
@@ -66,8 +66,8 @@ void c2s_admin_setup(void *param)
 	conn_t *conn = (conn_t *) param;
 
 	// send initial values
-	send_msg(conn, SM_NO_DEBUG, "ADM sdr_mode=%d", VAL_SDR_GPS_BUILD);
-	send_msg(conn, SM_NO_DEBUG, "ADM init=%d", RX_CHANS);
+	send_msg(conn, SM_NO_DEBUG, "ADM gps_only_mode=%d", VAL_CFG_GPS_ONLY);
+	send_msg(conn, SM_NO_DEBUG, "ADM init=%d", rx_chans);
 }
 
 void c2s_admin_shutdown(void *param)
@@ -238,9 +238,10 @@ void c2s_admin(void *param)
 // status
 ////////////////////////////////
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
 			i = strcmp(cmd, "SET dpump_hist_reset");
 			if (i == 0) {
+			    dpump_force_reset = true;
 			    dpump_resets = 0;
 		        memset(dpump_hist, 0, sizeof(dpump_hist));
 				continue;
@@ -407,7 +408,7 @@ void c2s_admin(void *param)
 
 			i = strcmp(cmd, "SET sdr_hu_update");
 			if (i == 0) {
-				asprintf(&sb, "{\"reg\":\"%s\"", shmem->sdr_hu_status);
+				asprintf(&sb, "{\"reg\":\"%s\"", shmem->status_str);
 				sb = kstr_wrap(sb);
 				
 				if (gps.StatLat) {
@@ -788,12 +789,12 @@ void c2s_admin(void *param)
                     int any_new = 0;
                     for (j = 0; j < GPS_NMAP; j++) {
                         for (k = 0; k < gps.MAP_len; k++) {
-                            u4_t seq = gps.MAP_data[0][k].seq;
+                            u4_t seq = gps.MAP_data_seq[k];
                             if (seq <= gps.MAP_seq_r || gps.MAP_data[j][k].lat == 0) continue;
-                            asprintf(&sb2, "%s{\"seq\":%d,\"nmap\":%d,\"lat\":%.6f,\"lon\":%.6f}", (any_new)? ",":"",
-                                seq, j, gps.MAP_data[j][k].lat, gps.MAP_data[j][k].lon);
+                            asprintf(&sb2, "%s{\"nmap\":%d,\"lat\":%.6f,\"lon\":%.6f}", any_new? ",":"",
+                                j, gps.MAP_data[j][k].lat, gps.MAP_data[j][k].lon);
                             sb = kstr_cat(sb, kstr_wrap(sb2));
-                            any_new++;
+                            any_new = 1;
                         }
                     }
                     sb = kstr_cat(sb, "]}");
@@ -820,12 +821,12 @@ void c2s_admin(void *param)
                     asprintf(&sb2, "%s{\"ch\":%d,\"prn_s\":\"%c\",\"prn\":%d,\"snr\":%d,\"rssi\":%d,\"gain\":%d,\"hold\":%d,\"wdog\":%d"
                         ",\"unlock\":%d,\"parity\":%d,\"alert\":%d,\"sub\":%d,\"sub_renew\":%d,\"soln\":%d,\"ACF\":%d,\"novfl\":%d,\"az\":%d,\"el\":%d}",
                         i? ", ":"", i, prn_s, prn, c->snr, c->rssi, c->gain, c->hold, c->wdog,
-                        c->ca_unlocked, c->parity, c->alert, c->sub, c->sub_renew, c->soln, c->ACF_mode, c->novfl, c->az, c->el);
+                        c->ca_unlocked, c->parity, c->alert, c->sub, c->sub_renew, c->has_soln, c->ACF_mode, c->novfl, c->az, c->el);
         //jks2
         //if(i==3)printf("%s\n", sb2);
                     sb = kstr_cat(sb, kstr_wrap(sb2));
                     c->parity = 0;
-                    c->soln = 0;
+                    c->has_soln = 0;
                     for (j = 0; j < SUBFRAMES; j++) {
                         if (c->sub_renew & (1<<j)) {
                             c->sub |= 1<<j;
@@ -835,7 +836,7 @@ void c2s_admin(void *param)
                     NextTask("gps_update4");
                 }
         
-                asprintf(&sb2, "],\"soln\":%d,\"sep\":%d", gps.soln, gps.E1B_plot_separately);
+                asprintf(&sb2, "],\"stype\":%d", gps.soln_type);
                 sb = kstr_cat(sb, kstr_wrap(sb2));
         
                 UMS hms(gps.StatSec/60/60);
@@ -1020,7 +1021,7 @@ void c2s_admin(void *param)
 
 			i = strcmp(cmd, "SET extint_load_extension_configs");
 			if (i == 0) {
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
 				extint_load_extension_configs(conn);
 #endif
 				send_msg(conn, SM_NO_DEBUG, "ADM auto_nat=%d", ddns.auto_nat);
@@ -1030,6 +1031,7 @@ void c2s_admin(void *param)
 			i = strcmp(cmd, "SET restart");
 			if (i == 0) {
 				clprintf(conn, "ADMIN: restart requested by admin..\n");
+				shmem->kiwi_exit = true;
 				xit(0);
 			}
 

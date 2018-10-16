@@ -455,11 +455,16 @@ function fsk_controls_setup()
             ),
 
             w3_inline('/w3-margin-between-16',
-               w3_select('|color:red', '', 'shift', 'fsk.shift', W3_SELECT_SHOW_TITLE, fsk_shift_s, 'fsk_shift_cb'),
-               w3_input('w3-label-inline id-fsk-shift-custom w3-hide|padding:0;width:auto|size=4', '', 'fsk.shift_custom', '0', 'fsk_shift_custom_cb'),
+               w3_inline('',
+                  w3_select('|color:red', '', 'shift', 'fsk.shift', W3_SELECT_SHOW_TITLE, fsk_shift_s, 'fsk_shift_cb'),
+                  w3_input('id-fsk-shift-custom w3-margin-left w3-hide|padding:0;width:auto|size=4', '', 'fsk.shift_custom', '0', 'fsk_shift_custom_cb')
+               ),
+               w3_div('w3-margin-left w3-hide'),
 
-               w3_select('|color:red', '', 'baud', 'fsk.baud', W3_SELECT_SHOW_TITLE, fsk_baud_s, 'fsk_baud_cb'),
-               w3_input('w3-label-inline id-fsk-baud-custom w3-hide|padding:0;width:auto|size=4', '', 'fsk.baud_custom', '0', 'fsk_baud_custom_cb'),
+               w3_inline('',
+                  w3_select('|color:red', '', 'baud', 'fsk.baud', W3_SELECT_SHOW_TITLE, fsk_baud_s, 'fsk_baud_cb'),
+                  w3_input('id-fsk-baud-custom w3-margin-left w3-hide|padding:0;width:auto|size=4', '', 'fsk.baud_custom', '0', 'fsk_baud_custom_cb')
+               ),
 
                w3_select('|color:red', '', 'framing', 'fsk.framing', W3_SELECT_SHOW_TITLE, fsk_framing_s, 'fsk_framing_cb'),
 
@@ -475,7 +480,7 @@ function fsk_controls_setup()
                w3_select('|color:red', '', 'mode', 'fsk.mode', 0, fsk_mode_s, 'fsk_mode_cb'),
 
                w3_div('',
-                  w3_inline('id-fsk-decode/w3-margin-between-16',
+                  w3_inline('id-fsk-decode/',
                      w3_button('w3-padding-smaller', 'Clear', 'fsk_clear_cb', 0)
                   ),
    
@@ -553,7 +558,7 @@ function fsk_setup()
    w3_select_set_if_includes('fsk.baud', '\\b'+ fsk.baud +'\\b');
    w3_select_set_if_includes('fsk.framing', '\\b'+ fsk.framing +'\\b');
    w3_select_set_if_includes('fsk.encoding', '\\b'+ fsk.encoding +'\\b');
-   w3_checkbox_value('fsk.inverted', fsk.inverted);
+   w3_checkbox_set('fsk.inverted', fsk.inverted);
    
    fsk_crosshairs(1);
 }
@@ -729,7 +734,7 @@ function fsk_inverted_cb(path, checked, first)
    checked = checked? 1:0;
    //console.log('fsk_inverted_cb checked='+ checked);
    fsk.inverted = checked;
-   w3_checkbox_value(path, checked);
+   w3_checkbox_set(path, checked);
    fsk_setup();
 }
 

@@ -5,7 +5,7 @@
 var WATERFALL_CALIBRATION_DEFAULT = -13;
 var SMETER_CALIBRATION_DEFAULT = -13;
 
-var rx_chans, rx_chan;
+var rx_chans, wf_chans, rx_chan;
 var try_again="";
 var conn_type;
 var seriousError = false;
@@ -86,6 +86,36 @@ function kiwi_open_ws_cb(p)
 
 	// always check the first time in case not having a pwd is accepted by local subnet match
 	ext_hasCredential(p.conn_type, kiwi_valpwd1_cb, p);
+}
+
+var kiwi = {
+   loaded_files: {},
+};
+
+// NB: NOT reentrant.
+// Especially relevant if it async load hangs waiting for a host to timeout.
+function kiwi_load_js(js_files, cb)
+{
+	console.log('LOAD START');
+	// kiwi_js_load.js will begin running only after all others have loaded and run.
+	// Can then safely call the callback.
+	js_files.push('kiwi/kiwi_js_load.js?cb='+ cb);
+
+   js_files.forEach(function(src) {
+      // only load once in case used in multiple places (e.g. Google maps)
+      if (!kiwi.loaded_files[src]) {
+         kiwi.loaded_files[src] = 1;
+         var script = document.createElement('script');
+         script.src = src;
+         script.type = 'text/javascript';
+         script.async = false;
+         document.head.appendChild(script);
+         console.log('loaded '+ src);
+      } else {
+         console.log('already loaded: '+ src);
+      }
+   });
+	console.log('LOAD FINISH');
 }
 
 function kiwi_ask_pwd(conn_kiwi)
@@ -290,7 +320,7 @@ function kiwi_geolocate(which)
             if (geo.retry++ <= 3)
                kiwi_geolocate(which+1);
          }
-      }, 5000
+      }, null, 5000
    );
 }
 
@@ -331,7 +361,7 @@ function kiwi_geojson()
 // time display
 ////////////////////////////////
 
-var server_time_utc, server_time_local, server_time_tzid, server_time_tzname;
+var server_time_utc, server_time_local, server_time_tzid, server_time_tzname, server_tz;
 var time_display_current = true;
 
 function time_display_cb(o)
@@ -340,7 +370,9 @@ function time_display_cb(o)
 	server_time_utc = o.tu;
 	server_time_local = o.tl;
 	server_time_tzid = decodeURIComponent(o.ti);
-	server_time_tzname = decodeURIComponent(o.tn);
+	server_time_tzname = decodeURIComponent(o.tn).replace(/\\/g, '').replace(/_/g, ' ');
+	server_tz = server_time_tzname;
+	if (server_time_tzid) server_tz += ' ('+ server_time_tzid +')';
 
 	if (!time_display_started) {
 		time_display_periodic();
@@ -357,7 +389,7 @@ function time_display(display_time)
 	var noLatLon = (server_time_local == '' || server_time_tzname == 'null');
 	w3_el('id-time-display-UTC').innerHTML = server_time_utc? server_time_utc : '?';
 	w3_el('id-time-display-local').innerHTML = noLatLon? '?' : server_time_local;
-	w3_el('id-time-display-tzname').innerHTML = noLatLon? 'Lat/lon needed for local time' : server_time_tzname;
+	w3_el('id-time-display-tzname').innerHTML = noLatLon? 'Lat/lon needed for local time' : server_tz;
 
 	w3_el('id-time-display-logo-inner').style.opacity = display_time? 0:1;
 	w3_el('id-time-display-inner').style.opacity = display_time? 1:0;
@@ -388,25 +420,23 @@ function time_display_setup(ext_name_or_id)
 	
 	var el = w3_el(ext_name_or_id);
 	el.innerHTML =
-		'<div id="id-time-display-inner">' +
-			'<div id="id-time-display-text-inner">' +
-				w3_div('w3-valign',
-					w3_div('w3-show-inline-block',
-						w3_div('id-time-display-UTC'),
-						w3_div('cl-time-display-text-suffix', 'UTC')
-					),
-					w3_div('w3-show-inline-block',
-						w3_div('id-time-display-local'),
-						w3_div('cl-time-display-text-suffix', 'Local')
-					),
-					w3_div('id-time-display-tzname w3-hcenter')
-				) +
-			'</div>' +
-		'</div>' +
-		'<div id="id-time-display-logo-inner">' +
-			'<div id="id-time-display-logo-text">Powered by</div>' +
-			'<a href="http://openwebrx.org/" target="_blank"><img id="id-time-display-logo" src="gfx/openwebrx-top-logo.png" /></a>' +
-		'</div>';
+		w3_div('id-time-display-inner',
+			w3_div('id-time-display-text-inner',
+            w3_inline('',
+               w3_div('id-time-display-UTC'),
+               w3_div('cl-time-display-text-suffix', 'UTC')
+            ),
+            w3_inline('',
+               w3_div('id-time-display-local'),
+               w3_div('cl-time-display-text-suffix', 'Local')
+            ),
+            w3_div('id-time-display-tzname')
+			)
+		) +
+		w3_div('id-time-display-logo-inner',
+			w3_div('id-time-display-logo-text', 'Powered by'),
+			'<a href="http://openwebrx.org/" target="_blank"><img id="id-time-display-logo" src="gfx/openwebrx-top-logo.png" /></a>'
+		);
 
 	time_display(time_display_current);
 }
@@ -630,7 +660,10 @@ function gps_stats_cb(acquiring, tracking, good, fixes, adc_clock, adc_gps_clk_c
 {
    var s = (acquiring? 'yes':'pause') +', track '+ tracking +', good '+ good +', fixes '+ fixes.toUnits();
 	w3_el_softfail('id-msg-gps').innerHTML = 'GPS acquire '+ s;
-	w3_innerHTML('id-status-gps', w3_text(optbar_prefix_color, 'GPS') +' acq '+ s);
+	w3_innerHTML('id-status-gps',
+	   w3_text(optbar_prefix_color, 'GPS'),
+	   w3_text('', 'acq '+ s)
+	);
 	extint_adc_clock_Hz = adc_clock * 1e6;
 	extint_adc_gps_clock_corr = adc_gps_clk_corrections;
 	if (adc_gps_clk_corrections) {
@@ -645,16 +678,17 @@ function admin_stats_cb(audio_dropped, underruns, seq_errors, dpump_resets, dpum
    if (audio_dropped == undefined) return;
    
 	var el = w3_el('id-msg-errors');
-	if (el) el.innerHTML = 'Errors: '+ audio_dropped +' dropped, '+ underruns +' underruns, '+ seq_errors +' sequence';
+	if (el) el.innerHTML = 'Stats: '+
+	   audio_dropped.toUnits() +' dropped, '+
+	   underruns.toUnits() +' underruns, '+
+	   seq_errors.toUnits() +' sequence, '+
+	   dpump_resets.toUnits() +' realtime';
 
-	el = w3_el('id-status-dpump-resets');
-   if (el) el.innerHTML = 'Data pump resets: '+ dpump_resets;
-   
 	el = w3_el('id-status-dpump-hist');
 	if (el) {
-	   var s = 'Data pump histogram: ';
+	   var s = 'Realtime response histogram: ';
 		for (var i = 0; i < dpump_nbufs; i++) {
-		   s += (i? ', ':'') + dpump_hist[i];
+		   s += (i? ', ':'') + dpump_hist[i].toUnits();
 		}
       el.innerHTML = s;
 	}
@@ -778,8 +812,10 @@ var kiwi_xfer_stats_str_long = "";
 
 function xfer_stats_cb(audio_kbps, waterfall_kbps, waterfall_fps, waterfall_total_fps, http_kbps, sum_kbps)
 {
-	kiwi_xfer_stats_str = w3_text(optbar_prefix_color, 'Net') +' aud '+ audio_kbps.toFixed(0) +', wf '+ waterfall_kbps.toFixed(0) +', http '+
-		http_kbps.toFixed(0) +', total '+ sum_kbps.toFixed(0) +' kB/s';
+	kiwi_xfer_stats_str =
+	   w3_text(optbar_prefix_color, 'Net') +
+	   w3_text('', 'aud '+ audio_kbps.toFixed(0) +', wf '+ waterfall_kbps.toFixed(0) +', http '+
+		http_kbps.toFixed(0) +', total '+ sum_kbps.toFixed(0) +' kB/s');
 
 	kiwi_xfer_stats_str_long = 'audio '+audio_kbps.toFixed(0)+' kB/s, waterfall '+waterfall_kbps.toFixed(0)+
 		' kB/s ('+waterfall_fps.toFixed(0)+'/'+waterfall_total_fps.toFixed(0)+' fps)' +
@@ -793,9 +829,13 @@ var kiwi_config_str_long = '';
 
 function cpu_stats_cb(uptime_secs, user, sys, idle, ecpu, waterfall_fps, waterfall_total_fps)
 {
-	kiwi_cpu_stats_str = w3_text(optbar_prefix_color, 'Beagle') +' '+ user +'%u '+ sys +'%s '+ idle +'%i, '+
-	   w3_text(optbar_prefix_color, 'FPGA') +' '+ ecpu.toFixed(0) +'%, '+
-	   w3_text(optbar_prefix_color, 'FPS') +' '+ waterfall_fps.toFixed(0) +'|'+ waterfall_total_fps.toFixed(0);
+	kiwi_cpu_stats_str =
+	   w3_text(optbar_prefix_color, 'Beagle') +
+	   w3_text('', user +'%u '+ sys +'%s '+ idle +'%i,') +
+	   w3_text(optbar_prefix_color, 'FPGA') +
+	   w3_text('', ecpu.toFixed(0) +'%') +
+	   w3_text(optbar_prefix_color, 'FPS') +
+	   w3_text('', waterfall_fps.toFixed(0) +'|'+ waterfall_total_fps.toFixed(0));
 	kiwi_cpu_stats_str_long = 'Beagle CPU '+ user +'% usr / '+ sys +'% sys / '+ idle +'% idle, FPGA eCPU '+ ecpu.toFixed(0) +'%';
 
 	var t = uptime_secs;
@@ -804,10 +844,13 @@ function cpu_stats_cb(uptime_secs, user, sys, idle, ecpu, waterfall_fps, waterfa
 	var hr  = Math.trunc(t % 24); t = Math.trunc(t/24);
 	var days = t;
 
-	var s = w3_text(optbar_prefix_color, 'Up') +' ';
+	var s = ' ';
 	if (days) s += days +'d:';
 	s += hr +':'+ min.leadingZeros(2) +':'+ sec.leadingZeros(2);
-	w3_innerHTML('id-status-config', w3_div('', s +', '+ kiwi_config_str));
+	w3_innerHTML('id-status-config',
+      w3_text(optbar_prefix_color, 'Up'),
+      w3_text('', s +', '+ kiwi_config_str)
+	);
 
 	s = ' | Uptime: ';
 	if (days) s += days +' '+ ((days > 1)? 'days':'day') +' ';
@@ -1022,6 +1065,19 @@ function kiwi_fft_mode()
 	}
 }
 
+function kiwi_mapPinSymbol(fillColor, strokeColor) {
+   fillColor = fillColor || 'red';
+   strokeColor = strokeColor || 'white';
+   return {
+      path: 'M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z',
+      fillColor: fillColor,
+      fillOpacity: 1,
+      strokeColor: strokeColor,
+      strokeWeight: 1,
+      scale: 1,
+   };
+}
+
 
 ////////////////////////////////
 // control messages
@@ -1063,6 +1119,10 @@ function kiwi_msg(param, ws)
 
 		case "rx_chans":
 			rx_chans = parseInt(param[1]);
+			break;
+
+		case "wf_chans":
+			wf_chans = parseInt(param[1]);
 			break;
 
 		case "rx_chan":
@@ -1248,7 +1308,8 @@ function kiwi_serious_error(s)
 	console.log(s);
 }
 
-function kiwi_trace()
+function kiwi_trace(msg)
 {
+   if (msg) console.log('console.trace: '+ msg);
 	try { console.trace(); } catch(ex) {}		// no console.trace() on IE
 }

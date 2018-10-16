@@ -52,7 +52,7 @@
 
 wspr_conf_t wspr_c;
 
-static wspr_t wspr[RX_CHANS];
+static wspr_t wspr[MAX_RX_CHANS];
 
 // assigned constants
 int nffts, nbins_411, hbins_205;
@@ -185,7 +185,7 @@ void WSPR_FFT(void *param)
 		w->decode_ping_pong = w->fft_ping_pong;
 		wprintf("WSPR ---DECODE -> %d\n", w->decode_ping_pong);
 		wprintf("\n");
-		TaskWakeup(w->WSPR_DecodeTask_id, TRUE, TO_VOID_PARAM(w->rx_chan));
+		TaskWakeup(w->WSPR_DecodeTask_id, TWF_CHECK_WAKING, TO_VOID_PARAM(w->rx_chan));
     }
 }
 
@@ -346,7 +346,7 @@ void wspr_data(int rx_chan, int ch, int nsamps, TYPECPX *samps)
                 //    w->ping_pong, w->group, frate, fdecimate, rx_chan);
                 w->fft_ping_pong = w->ping_pong;
                 w->FFTtask_group = w->group-1;
-                if (w->group) TaskWakeup(w->WSPR_FFTtask_id, TRUE, w->rx_chan);	// skip first to pipeline
+                if (w->group) TaskWakeup(w->WSPR_FFTtask_id, TWF_CHECK_WAKING, w->rx_chan);	// skip first to pipeline
                 w->group++;
             }
             w->didx++;
@@ -378,7 +378,7 @@ void wspr_data(int rx_chan, int ch, int nsamps, TYPECPX *samps)
 			if ((w->didx % NFFT) == (NFFT-1)) {
 				w->fft_ping_pong = w->ping_pong;
 				w->FFTtask_group = w->group-1;
-				if (w->group) TaskWakeup(w->WSPR_FFTtask_id, TRUE, TO_VOID_PARAM(w->rx_chan));	// skip first to pipeline
+				if (w->group) TaskWakeup(w->WSPR_FFTtask_id, TWF_CHECK_WAKING, TO_VOID_PARAM(w->rx_chan));	// skip first to pipeline
 				w->group++;
 			}
 			w->didx++;
@@ -473,7 +473,7 @@ static double wspr_cfs[] = {
     137.5, 475.7, 1838.1, 3570.1, 3594.1, 5288.7, 5366.2, 7040.1, 10140.2, 14097.1, 18106.1, 21096.1, 24926.1, 28126.1
 };
 
-static struct mg_connection wspr_snd_mc[RX_CHANS], wspr_ext_mc[RX_CHANS];
+static struct mg_connection wspr_snd_mc[MAX_RX_CHANS], wspr_ext_mc[MAX_RX_CHANS];
 
 void wspr_autorun(int which, int idx)
 {
@@ -553,7 +553,7 @@ void wspr_main()
     nbins_411 = ceilf(NFFT * BW_MAX / FSRATE) +1;
     hbins_205 = (nbins_411-1)/2;
 
-	for (i=0; i < RX_CHANS; i++) {
+	for (i=0; i < rx_chans; i++) {
 		wspr_t *w = &wspr[i];
 		memset(w, 0, sizeof(wspr_t));
 		

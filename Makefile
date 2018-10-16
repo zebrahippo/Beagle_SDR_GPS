@@ -1,5 +1,5 @@
 VERSION_MAJ = 1
-VERSION_MIN = 195
+VERSION_MIN = 239
 
 REPO_NAME = Beagle_SDR_GPS
 DEBIAN_VER = 8.5
@@ -454,8 +454,14 @@ $(OBJ_DIR_O3):
 $(GEN_DIR):
 	@mkdir -p $(GEN_DIR)
 
-KiwiSDR.bit:
+V_DIR = ~/shared/shared
+
+ifeq ($(DEBIAN_DEVSYS),$(DEVSYS))
+
+KiwiSDR.bit: $(V_DIR)/KiwiSDR.bit
 	rsync -av $(V_DIR)/KiwiSDR.bit .
+
+endif
 
 DEV = kiwi
 CAPE = cape-bone-$(DEV)-00A0
@@ -501,7 +507,8 @@ else
 	install -D -o root -g root $(BUILD_DIR)/kiwid.bin /usr/local/bin/kiwid
 	install -D -o root -g root $(GEN_DIR)/kiwi.aout /usr/local/bin/kiwid.aout
 #	install -D -o root -g root $(GEN_DIR)/kiwi_realtime.bin /usr/local/bin/kiwid_realtime.bin
-	install -D -o root -g root KiwiSDR.bit /usr/local/bin/KiwiSDRd.bit
+	install -D -o root -g root KiwiSDR.rx4.wf4.bit /usr/local/bin/KiwiSDR.rx4.wf4.bit
+	install -D -o root -g root KiwiSDR.rx8.wf2.bit /usr/local/bin/KiwiSDR.rx8.wf2.bit
 #
 	install -o root -g root unix_env/kiwid /etc/init.d
 	install -o root -g root -m 0644 unix_env/kiwid.service /etc/systemd/system
@@ -661,7 +668,6 @@ endif
 	hexdump -C /sys/bus/i2c/devices/0-0050/eeprom
 
 REPO = https://github.com/jks-prv/$(REPO_NAME).git
-V_DIR = ~/shared/shared
 
 # selectively transfer files to the target so everything isn't compiled each time
 EXCLUDE_RSYNC = ".git" "/obj" "/obj_O3" "/obj_keep" "*.dSYM" "*.bin" "*.aout" "e_cpu/a" "*.aout.h" "kiwi.gen.h" \
