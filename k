@@ -1,8 +1,9 @@
 #!/bin/sh
 # wrapper for running the app
 
+BUILD_DIR=../build
 DEV=kiwi
-PROG=kiwi.bin
+PROG=${BUILD_DIR}/kiwi.bin
 
 CMD=$(basename $0)
 case ${CMD} in
@@ -14,6 +15,9 @@ case ${CMD} in
 		;;
 	"g")
 		ARGS="+gps -stats 1 $*"
+		;;
+	"d")
+		ARGS="-gps -leds $*"
 		;;
 esac
 echo ARGS = ${ARGS}

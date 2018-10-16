@@ -39,8 +39,11 @@ try {
 	console.log("kiwi_util: String.prototype.endsWith");
 }
 
+var kiwi_util = {
+};
+
 var kiwi_iOS, kiwi_OSX, kiwi_linux, kiwi_Windows, kiwi_android;
-var kiwi_safari, kiwi_firefox, kiwi_chrome;
+var kiwi_safari, kiwi_firefox, kiwi_chrome, kiwi_opera;
 
 // wait until DOM has loaded before proceeding (browser has loaded HTML, but not necessarily images)
 document.onreadystatechange = function() {
@@ -56,12 +59,27 @@ document.onreadystatechange = function() {
 		kiwi_Windows = s.includes('Win');
 		kiwi_android = s.includes('Android');
 
-		kiwi_safari = /safari\/([0-9]+)/i.exec(s)? true:false;
-		kiwi_firefox = /firefox\/([0-9]+)/i.exec(s)? true:false;
-		kiwi_chrome = /chrome\/([0-9]+)/i.exec(s)? true:false;
+		kiwi_safari = /safari\/([0-9]+)/i.exec(s);
+		kiwi_browserVersion = /version\/([0-9]+)/i.exec(s);
+		kiwi_firefox = /firefox\/([0-9]+)/i.exec(s);
+		kiwi_chrome = /chrome\/([0-9]+)/i.exec(s);
+		kiwi_opera = /opera\/([0-9]+)/i.exec(s);
+		if (!kiwi_opera) kiwi_opera = /OPR\/([0-9]+)/i.exec(s);
+		
 		console.log('iOS='+ kiwi_iOS +' OSX='+ kiwi_OSX +' Linux='+ kiwi_linux +' Windows='+ kiwi_Windows +' android='+ kiwi_android);
-		console.log('safari='+ kiwi_safari +' firefox='+ kiwi_firefox +' chrome='+ kiwi_chrome);
-		//alert('iOS='+ kiwi_iOS +' OSX='+ kiwi_OSX +' android='+ kiwi_android + ' safari='+ kiwi_safari +' firefox='+ kiwi_firefox +' chrome='+ kiwi_chrome);
+		
+		// madness..
+		if (kiwi_opera) {
+		   kiwi_chrome = kiwi_safari = null;
+		} else
+		if (kiwi_chrome) {
+		   kiwi_safari = null;
+		} else
+		if (kiwi_safari) {
+		   if (kiwi_browserVersion) kiwi_safari[1] = kiwi_browserVersion[1];
+		}
+
+		console.log('safari='+ kiwi_isSafari() + ' firefox='+ kiwi_isFirefox() + ' chrome='+ kiwi_isChrome() + ' opera='+ kiwi_isOpera());
 
 		if (typeof kiwi_check_js_version != 'undefined') {
 			// done as an AJAX because needed long before any websocket available
@@ -70,6 +88,32 @@ document.onreadystatechange = function() {
 			kiwi_bodyonload('');
 		}
 	}
+}
+
+function kiwi_is_iOS() { return kiwi_iOS; }
+
+function kiwi_isOSX() { return kiwi_OSX; }
+
+function kiwi_isWindows() { return kiwi_Windows; }
+
+function kiwi_isLinux() { return kiwi_linux; }
+
+function kiwi_isAndroid() { return kiwi_android; }
+
+function kiwi_isMobile() { return (kiwi_isAndroid() || kiwi_is_iOS()); }
+
+// returns the version number or NaN (later of which will evaluate false in numeric comparisons)
+function kiwi_isSafari() { return (kiwi_safari? kiwi_safari[1] : NaN); }
+
+function kiwi_isFirefox() { return (kiwi_firefox? kiwi_firefox[1] : NaN); }
+
+function kiwi_isChrome() { return (kiwi_chrome? kiwi_chrome[1] : NaN); }
+
+function kiwi_isOpera() { return (kiwi_opera? kiwi_opera[1] : NaN); }
+
+function kiwi_browserNoAutoplay()
+{
+   return (kiwi_safari || kiwi_chrome || kiwi_opera);
 }
 
 var kiwi_version_fail = false;
@@ -105,7 +149,7 @@ function kiwi_version_continue_cb()
 	kiwi_bodyonload('');
 }
 
-function q(s)
+function sq(s)
 {
 	return '\''+ s +'\'';
 }
@@ -262,64 +306,6 @@ function kiwi_clearInterval(interval)
    try { clearInterval(interval); } catch(e) {};
 }
 
-// from http://www.quirksmode.org/js/cookies.html
-function createCookie(name, value, days) {
-	var expires = "";
-	if (days) {
-		var date = new Date();
-		date.setTime(date.getTime() + (days*24*60*60*1000));
-		expires = "; expires="+ date.toGMTString();
-	}
-	//console.log('createCookie <'+ name +"="+ value + expires +"; path=/" +'>');
-	document.cookie = name +"="+ value + expires +"; path=/";
-}
-
-function readCookie(name) {
-	var nameEQ = name + "=";
-	var ca = document.cookie.split(';');
-	for (var i=0; i < ca.length; i++) {
-		var c = ca[i];
-		while (c.charAt(0) == ' ') c = c.substring(1, c.length);
-		//console.log('readCookie '+ name +' consider <'+ c +'>');
-		if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
-	}
-	return null;
-}
-
-function writeCookie(cookie, value)
-{
-	createCookie(cookie, value, 42*365);
-}
-
-function initCookie(cookie, initValue)
-{
-	var v = readCookie(cookie);
-	if (v == null) {
-		writeCookie(cookie, initValue);
-		return initValue;
-	} else {
-		return v;
-	}
-}
-
-function updateCookie(cookie, initValue)
-{
-	var v = readCookie(cookie);
-	if (v == null || v != initValue) {
-		writeCookie(cookie, initValue);
-		return true;
-	} else {
-		return false;
-	}
-}
-
-function deleteCookie(cookie)
-{
-	var v = readCookie(cookie);
-	if (v == null) return;
-	createCookie(cookie, 0, -1);
-}
-
 var littleEndian = (function() {
 	var buffer = new ArrayBuffer(2);
 	new DataView(buffer).setInt16(0, 256, true /* littleEndian */);
@@ -328,6 +314,23 @@ var littleEndian = (function() {
 })();
 
 //console.log('littleEndian='+ littleEndian);
+
+function _nochange(v)
+{
+   if (arguments.length == 0) return undefined;
+   return (v === undefined);
+}
+
+function _default(v)
+{
+   if (arguments.length == 0) return NaN;
+   return isNaN(v);
+}
+
+function _change(v)
+{
+   return (!_nochange(v) && !_default(v));
+}
 
 
 ////////////////////////////////
@@ -445,6 +448,64 @@ function hsl(h, s, l)
 	return 'hsl('+ Math.round(h) +','+ s +'%,'+ l +'%)';
 }
 
+// from http://www.quirksmode.org/js/cookies.html
+function createCookie(name, value, days) {
+	var expires = "";
+	if (days) {
+		var date = new Date();
+		date.setTime(date.getTime() + (days*24*60*60*1000));
+		expires = "; expires="+ date.toGMTString();
+	}
+	//console.log('createCookie <'+ name +"="+ value + expires +"; path=/" +'>');
+	document.cookie = name +"="+ value + expires +"; path=/";
+}
+
+function readCookie(name) {
+	var nameEQ = name + "=";
+	var ca = document.cookie.split(';');
+	for (var i=0; i < ca.length; i++) {
+		var c = ca[i];
+		while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+		//console.log('readCookie '+ name +' consider <'+ c +'>');
+		if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+	}
+	return null;
+}
+
+function writeCookie(cookie, value)
+{
+	createCookie(cookie, value, 42*365);
+}
+
+function initCookie(cookie, initValue)
+{
+	var v = readCookie(cookie);
+	if (v == null) {
+		writeCookie(cookie, initValue);
+		return initValue;
+	} else {
+		return v;
+	}
+}
+
+function updateCookie(cookie, initValue)
+{
+	var v = readCookie(cookie);
+	if (v == null || v != initValue) {
+		writeCookie(cookie, initValue);
+		return true;
+	} else {
+		return false;
+	}
+}
+
+function deleteCookie(cookie)
+{
+	var v = readCookie(cookie);
+	if (v == null) return;
+	createCookie(cookie, 0, -1);
+}
+
 // Get function from string, with or without scopes (by Nicolas Gauthier)
 // stackoverflow.com/questions/912596/how-to-turn-a-string-into-a-javascript-function-call
 // returns null if var doesn't exist in last scope, throws error if scope level missing
@@ -486,6 +547,22 @@ function setVarFromString(string, val)
 // from: stackoverflow.com/questions/332422/how-do-i-get-the-name-of-an-objects-type-in-javascript
 // NB: may not work in all cases
 function getType(o) { return o && o.constructor && o.constructor.name }
+
+// see: feather.elektrum.org/book/src.html
+function kiwi_parseQuery ( query ) {
+   var Params = new Object ();
+   if ( ! query ) return Params; // return empty object
+   var Pairs = query.split(/[;&]/);
+   for ( var i = 0; i < Pairs.length; i++ ) {
+      var KeyVal = Pairs[i].split('=');
+      if ( ! KeyVal || KeyVal.length != 2 ) continue;
+      var key = unescape( KeyVal[0] );
+      var val = unescape( KeyVal[1] );
+      val = val.replace(/\+/g, ' ');
+      Params[key] = val;
+   }
+   return Params;
+}
 
 
 ////////////////////////////////
@@ -557,26 +634,32 @@ function kiwi_GETrequest_param(request, name, value)
 
 var ajax_state = { DONE:4 };
 
-function kiwi_ajax(url, callback, timeout)
+function kiwi_ajax(url, callback, cb_param, timeout)
 {
-	kiwi_ajax_prim('GET', null, url, callback, timeout);
+	kiwi_ajax_prim('GET', null, url, callback, cb_param, timeout);
 }
 
-function kiwi_ajax_send(data, url, callback, timeout)
+function kiwi_ajax_progress(url, callback, cb_param, timeout, progress_cb, progress_cb_param)
 {
-	kiwi_ajax_prim('PUT', data, url, callback, timeout);
+	kiwi_ajax_prim('GET', null, url, callback, cb_param, timeout, progress_cb, progress_cb_param);
+}
+
+function kiwi_ajax_send(data, url, callback, cb_param, timeout)
+{
+	kiwi_ajax_prim('PUT', data, url, callback, cb_param, timeout);
 }
 
 var ajax_id = 0;
 var ajax_requests = {};
 
-function kiwi_ajax_prim(method, data, url, callback, timeout)
+function kiwi_ajax_prim(method, data, url, callback, cb_param, timeout, progress_cb, progress_cb_param)
 {
    ajax_id++;
 	var ajax;
 	
 	var dbug = function(msg) {
 	   //kiwi_debug(msg);
+	   //console.log(msg);
 	};
 	
 	//try {
@@ -612,14 +695,25 @@ function kiwi_ajax_prim(method, data, url, callback, timeout)
 	      dbug('AJAX TIMEOUT occurred, recovered id='+ id +' url='+ url);
 	      var obj = { AJAX_error:'timeout' };
          if (typeof callback === 'function')
-            callback(obj);
+            callback(obj, cb_param);
          else
          if (typeof callback === 'string')
-            w3_call(callback, obj);
+            w3_call(callback, obj, cb_param);
 			ajax.abort();
 			delete ajax;
 		   delete ajax_requests[id];
 		}, timeout);
+	}
+	
+	if (progress_cb) {
+	   ajax.onprogress = function() {
+	      var response = ajax.responseText.toString() || '';
+         if (typeof progress_cb === 'function')
+            progress_cb(response, progress_cb_param);
+         else
+         if (typeof progress_cb === 'string')
+            w3_call(progress_cb, response, progress_cb_param);
+	   };
 	}
 	
 	ajax.onerror = function(e) {
@@ -664,6 +758,14 @@ function kiwi_ajax_prim(method, data, url, callback, timeout)
                obj = { AJAX_error:'JSON prefix', response:response };
             } else {
                try {
+                  // remove comments from JSON consisting of line beginning with '//' in column 1
+                  var decmt = false;
+                  while ((cb = response.indexOf('\n//')) != -1) {
+                     ce = response.indexOf('\n', cb+3);
+                     response = response.slice(0, cb) + response.slice(ce);
+                     decmt = true;
+                  }
+                  //if (decmt) console.log(response);
                   obj = JSON.parse(response);		// response can be empty
                   dbug('AJAX JSON response:');
                   dbug(response);
@@ -678,10 +780,10 @@ function kiwi_ajax_prim(method, data, url, callback, timeout)
    
 		   dbug('AJAX ORSC CALLBACK recovered id='+ id +' callback='+ typeof callback);
          if (typeof callback === 'function')
-            callback(obj);
+            callback(obj, cb_param);
          else
          if (typeof callback === 'string')
-            w3_call(callback, obj);
+            w3_call(callback, obj, cb_param);
       } else {
 		   dbug('AJAX ORSC TIMED_OUT recovered id='+ id);
       }
@@ -695,51 +797,6 @@ function kiwi_ajax_prim(method, data, url, callback, timeout)
 	dbug('AJAX SEND id='+ ajax_id +' url='+ url);
 	ajax.send(data);
 	return true;
-}
-
-function kiwi_is_iOS()
-{
-	return kiwi_iOS;
-}
-
-function kiwi_isOSX()
-{
-	return kiwi_OSX;
-}
-
-function kiwi_isWindows()
-{
-	return kiwi_Windows;
-}
-
-function kiwi_isLinux()
-{
-	return kiwi_linux;
-}
-
-function kiwi_isAndroid()
-{
-	return kiwi_android;
-}
-
-function kiwi_isMobile()
-{
-	return (kiwi_isAndroid() || kiwi_is_iOS());
-}
-
-function kiwi_isSafari()
-{
-	return kiwi_safari;
-}
-
-function kiwi_isFirefox()
-{
-	return kiwi_firefox;
-}
-
-function kiwi_isChrome()
-{
-	return kiwi_chrome;
 }
 
 function kiwi_scrollbar_width()
@@ -892,7 +949,8 @@ function open_websocket(stream, open_cb, open_cb_param, msg_cb, recv_cb, error_c
 		ws_protocol = 'wss://';
 	}
 	
-	ws_url = ws_protocol + ws_url +'/'+ timestamp +'/'+ stream;
+	var no_wf = (window.location.href.includes('?no_wf') || window.location.href.includes('&no_wf'));
+	ws_url = ws_protocol + ws_url +'/'+ (no_wf? 'no_wf/':'kiwi/') + timestamp +'/'+ stream;
 	
 	//console.log('open_websocket '+ ws_url);
 	var ws = new WebSocket(ws_url);

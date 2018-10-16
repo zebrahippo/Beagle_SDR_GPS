@@ -632,7 +632,7 @@ function audio_recv(data)
          // punt and just use old resampler for IQ mode
          resample_new = false; resample_old = !resample_new;
          audio_mode_iq = true;
-         console.log('AUDIO IQ mode');
+         //console.log('AUDIO IQ mode');
          audio_connect(1);
 	   }
 	   audio_compression = false;
@@ -653,7 +653,7 @@ function audio_recv(data)
          audio_adpcm.index = audio_adpcm.previousValue = 0;
          resample_new = true; resample_old = !resample_new;
          audio_mode_iq = false;
-         console.log('AUDIO compression change='+ (audio_compression != compressed) +' now='+ compressed);
+         //console.log('AUDIO compression change='+ (audio_compression != compressed) +' now='+ compressed);
          audio_compression = compressed;
          audio_connect(1);
 	   }
@@ -665,12 +665,13 @@ function audio_recv(data)
 //admsg++; if ((admsg & 0x1f) == 0) console.log('audio_compression='+ audio_compression +' bytes='+ bytes);
 	if (audio_compression) {
 		decode_ima_adpcm_e8_i16(ad8, audio_data, bytes, audio_adpcm);
-		samps = bytes*2;		// i.e. 1024 8b bytes -> 2048 16b samps, 1KB -> 4KB, 4:1 over uncompressed
+		samps = bytes*2;		// i.e. 1024 8b bytes -> 2048 16b real samps, 1KB -> 4KB, 4:1 over uncompressed
 	} else {
 		for (i=0; i<bytes; i+=2) {
 			audio_data[i/2] = (ad8[i]<<8) | ad8[i+1];		// convert from network byte-order
 		}
-		samps = bytes/2;		// i.e. 1024 8b bytes -> 512 16b samps, 1KB -> 1KB, 1:1 no compression
+		samps = bytes/2;		// i.e. non-IQ: 1024 8b bytes ->  512 16b real samps,                     1KB -> 1KB, 1:1 no compression
+		                     // i.e.     IQ: 2048 8b bytes -> 1024 16b  I,Q samps (512 IQ samp pairs), 2KB -> 2KB, 1:1 never compression
 	}
 	
 	audio_prepare(audio_data, samps, seq, flags, smeter);
@@ -689,6 +690,32 @@ function audio_recv(data)
 	audio_stat_total_input_size += samps;
 
 	extint_audio_data(audio_data, samps);
+
+
+   // audio FFT hook
+   if (rx_chan >= wf_chans) {
+      wf_audio_FFT(audio_data, samps);
+   }
+
+
+	// Recording hooks
+	if (window.recording) {
+		var samples = audio_mode_iq ? 1024 : (compressed ? 2048 : 512);
+
+		// There are 2048 or 512 little-endian samples in each audio_data, the rest of the elements are zeroes
+		for (var i = 0; i < samples; ++i) {
+			window.recording_meta.data.setInt16(window.recording_meta.offset, audio_data[i], true);
+			window.recording_meta.offset += 2;
+		}
+		window.recording_meta.total_size += samples * 2;
+
+		// Check if it's time for a new buffer yet
+		if (window.recording_meta.offset == 65536) {
+			window.recording_meta.buffers.push(new ArrayBuffer(65536));
+			window.recording_meta.data = new DataView(window.recording_meta.buffers[window.recording_meta.buffers.length - 1]);
+			window.recording_meta.offset = 0;
+		}
+	}
 }
 
 var audio_push_ct = 0;
@@ -1001,8 +1028,10 @@ function audio_stats()
 	if (audio_restart_count) s += ', restart '+audio_restart_count.toString();
    w3_innerHTML('id-msg-audio', s);
    
-   s = w3_text(optbar_prefix_color, 'Audio') +' '+ net_sps.toFixed(0) +'|'+ out_sps.toFixed(0) +' sps, Qlen '+ audio_prepared_buffers.length;
-   w3_innerHTML('id-status-audio', s);
+   w3_innerHTML('id-status-audio',
+      w3_text(optbar_prefix_color, 'Audio'),
+      w3_text('', net_sps.toFixed(0) +'|'+ out_sps.toFixed(0) +' sps, Qlen '+ audio_prepared_buffers.length)
+   );
 
 	audio_stat_input_size = 0;
 }

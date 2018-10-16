@@ -72,7 +72,8 @@ module RECEIVER (
 `endif
 	
 	wire set_rx_chan_C =	wrReg2 && op[SET_RX_CHAN];
-	wire set_rx_freq_C =	wrReg2 && op[SET_RX_FREQ];
+	wire set_rx_freqH_C =	wrReg2 && op[SET_RX_FREQ];
+	wire set_rx_freqL_C =	wrReg2 && op[SET_RX_FREQ_L];
 	wire set_rx_nsamps_C =	wrReg2 && op[SET_RX_NSAMPS];
 	
 	wire set_wf_chan_C =	wrReg2 && op[SET_WF_CHAN];
@@ -187,7 +188,8 @@ module RECEIVER (
 		.cpu_clk		(cpu_clk),
 		.freeze_tos		(freeze_tos_A),
 		
-		.set_rx_freq_C	(set_rx_freq_C)
+		.set_rx_freqH_C	(set_rx_freqH_C),
+		.set_rx_freqL_C	(set_rx_freqL_C)
 	);
 
 `ifdef MEAS_CIC_OUT
@@ -212,7 +214,7 @@ module RECEIVER (
 	
     reg [L2RX+1:0] rxn;		// careful: needs to hold RX_CHANS for the "rxn == RX_CHANS" test, not RX_CHANS-1
     reg [L2RX:0] rxn_d;
-    reg [6:0] count;
+    reg [7:0] count;
 	reg inc_A, wr, use_ts, use_ctr;
 	reg transfer;
 	reg [1:0] move;
@@ -220,7 +222,7 @@ module RECEIVER (
 	
 	wire set_nsamps;
 	SYNC_PULSE sync_set_nsamps (.in_clk(cpu_clk), .in(set_rx_nsamps_C), .out_clk(adc_clk), .out(set_nsamps));
-    reg [6:0] nrx_samps;
+    reg [7:0] nrx_samps;
     always @ (posedge adc_clk)
         if (set_nsamps) nrx_samps <= freeze_tos_A;
     
@@ -439,7 +441,8 @@ module RECEIVER (
 		else
 	    buf_ctr <= buf_ctr + inc_A;
 
-	reg [12:0] waddr, raddr;
+    localparam RXBUF_MSB = clog2(RXBUF_SIZE) - 1;
+	reg [RXBUF_MSB:0] waddr, raddr;
 	
 	wire reset_bufs_A;
 	SYNC_PULSE sync_reset_bufs (.in_clk(cpu_clk), .in(reset_bufs_C), .out_clk(adc_clk), .out(reset_bufs_A));
@@ -477,8 +480,12 @@ module RECEIVER (
     // Transfer size is 1012 16-bit words to match 2kB limit of SPI transfers,
     // so this 8k x 16b buffer allows writer to get about 8x ahead of reader.
     // Read and write addresses just wrap and are reset at the start.
-    
+
+`ifdef RXBUF_LARGE
+	ipcore_bram_16k_16b rx_buf (
+`else
 	ipcore_bram_8k_16b rx_buf (
+`endif
 		.clka	(adc_clk),							.clkb	(cpu_clk),
 		.addra	(waddr),					        .addrb	(raddr + rd),
 		.dina	(din),		                        .doutb	(dout),
@@ -493,6 +500,7 @@ module RECEIVER (
     // waterfall(s)
     //////////////////////////////////////////////////////////////////////////
 
+`ifdef WF_EXISTS
     localparam L2WF = clog2(WF_CHANS) - 1;
     reg [L2WF:0] wf_channel_C;
 	wire [WF_CHANS-1:0] wfn_sel_C = 1 << wf_channel_C;
@@ -531,5 +539,6 @@ module RECEIVER (
 		.get_wf_samp_i_C	(get_wf_samp_i_C),
 		.get_wf_samp_q_C	(get_wf_samp_q_C)
 	);
+`endif
 
 endmodule

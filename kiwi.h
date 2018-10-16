@@ -21,6 +21,7 @@ Boston, MA  02110-1301, USA.
 
 #include "types.h"
 #include "kiwi.gen.h"
+#include "printf.h"
 #include "datatypes.h"
 #include "coroutines.h"
 #include "cfg.h"
@@ -50,7 +51,7 @@ extern int p0, p1, p2, wf_sim, wf_real, wf_time, ev_dump, wf_flip, wf_exit, wf_s
 	spi_delay, do_fft, noisePwr, unwrap, rev_iq, ineg, qneg, fft_file, fftsize, fftuse, bg, alt_port,
 	color_map, port, print_stats, ecpu_cmds, ecpu_tcmds, serial_number, ip_limit_mins,
 	use_spidev, inactivity_timeout_mins, S_meter_cal, current_nusers, debug_v, debian_ver,
-	utc_offset, dst_offset, reg_kiwisdr_com_status, sdr_hu_lo_kHz, sdr_hu_hi_kHz,
+	utc_offset, dst_offset, reg_kiwisdr_com_status, reg_kiwisdr_com_tid, sdr_hu_lo_kHz, sdr_hu_hi_kHz,
 	debian_maj, debian_min, gps_debug, gps_var, gps_lo_gain, gps_cg_gain;
 
 extern char **main_argv;
@@ -63,7 +64,7 @@ extern char auth_su_remote_ip[NET_ADDRSTRLEN];
 extern cfg_t cfg_ipl;
 
 extern lock_t spi_lock;
-extern volatile float audio_kbps, waterfall_kbps, waterfall_fps[RX_CHANS+1], http_kbps;
+extern volatile float audio_kbps, waterfall_kbps, waterfall_fps[MAX_RX_CHANS+1], http_kbps;
 extern volatile int audio_bytes, waterfall_bytes, waterfall_frames[], http_bytes;
 
 #define N_MODE 8
@@ -88,11 +89,13 @@ void dump();
 void c2s_sound_init();
 void c2s_sound_setup(void *param);
 void c2s_sound(void *param);
+void c2s_sound_shutdown(void *param);
 
 void c2s_waterfall_init();
 void c2s_waterfall_compression(int rx_chan, bool compression);
 void c2s_waterfall_setup(void *param);
 void c2s_waterfall(void *param);
+void c2s_waterfall_shutdown(void *param);
 
 void c2s_admin_setup(void *param);
 void c2s_admin_shutdown(void *param);

@@ -80,12 +80,13 @@ function example_controls_setup()
 
 	ext_panel_show(controls_html, data_html, null);
 	time_display_setup('example');
-	example_resize();
+	example_environment_changed( {resize:1} );
 }
 
-// automatically called on window resize
-function example_resize()
+// automatically called on changes in the environment
+function example_environment_changed(changed)
 {
+   if (!changed.resize) return;
 	var el = w3_el('id-example-data');
 	var left = (window.innerWidth - 1024 - time_display_width()) / 2;
 	el.style.left = px(left);
@@ -100,11 +101,11 @@ function example_blur()
 function example_config_html()
 {
 	ext_admin_config(example_ext_name, 'Example',
-		w3_divs('id-example w3-text-teal w3-hide', '',
+		w3_div('id-example w3-text-teal w3-hide',
 			'<b>Example configuration</b>' +
 			'<hr>' +
 			w3_third('', 'w3-container',
-				w3_divs('', 'w3-margin-bottom',
+				w3_divs('w3-margin-bottom',
 					w3_input_get('', 'int1', 'example.int1', 'w3_num_cb'),
 					w3_input_get('', 'int2', 'example.int2', 'w3_num_cb')
 				), '', ''

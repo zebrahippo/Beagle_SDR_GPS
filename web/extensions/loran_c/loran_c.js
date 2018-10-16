@@ -50,7 +50,7 @@ var loran_c_default_chain1 = 7;
 var loran_c_default_chain2 = 3;
 
 // Emission delay data from Markus Vester, DF6NM
-// LoranView: www.df6nm.bplaced.net/LoranView/LoranGrabber.htm
+// LoranView: df6nm.bplaced.net/LoranView/LoranGrabber.htm
 
 var emission_delay = {
 
@@ -332,32 +332,32 @@ function loran_c_controls_setup()
 	//console.log('loran_c_controls_setup: gri0='+ gri0 +' gri1='+ gri1);
 
 	var controls_html =
-		w3_divs('id-loran_c-controls w3-text-white', '',
-			w3_col_percent('', '',
-				w3_divs('', 'w3-medium w3-text-aqua', '<b>Loran-C viewer</b>'), 40,
-				w3_divs('', '',
-					'See also <b><a href="http://www.df6nm.bplaced.net/LoranView/LoranGrabber.htm" target="_blank">LoranView</a></b> by DF6NM'), 60
+		w3_div('id-loran_c-controls w3-text-white',
+			w3_col_percent('',
+				w3_div('w3-medium w3-text-aqua', '<b>Loran-C viewer</b>'), 40,
+				w3_div('',
+					'See also <b><a href="http://df6nm.bplaced.net/LoranView/LoranGrabber.htm" target="_blank">LoranView</a></b> by DF6NM'), 60
 			),
 			
 			w3_half('', '',
-				w3_divs('', 'w3-margin-T-8 w3-margin-R-10',
-					w3_col_percent('', '',
-						w3_input('', 'GRI', 'loran_c.gri0', loran_c.gri0, 'loran_c_gri_cb'), 25
+				w3_divs('w3-margin-T-8 w3-margin-R-10',
+					w3_col_percent('',
+						w3_input('w3-padding-smaller', 'GRI', 'loran_c.gri0', loran_c.gri0, 'loran_c_gri_cb'), 25
 					),
 					w3_select('', 'GRI', 'select', 'loran_c.gri_sel0', 0, gri_s, 'loran_c_gri_select_cb'),
-					w3_slider('Gain (auto-scale)', 'loran_c.gain0', loran_c.gain0, 0, 100, 1, 'loran_c_gain_cb'),
+					w3_slider('', 'Gain (auto-scale)', 'loran_c.gain0', loran_c.gain0, 0, 100, 1, 'loran_c_gain_cb'),
 					w3_select('', 'Averaging', '', 'loran_c.avg_algo0', loran_c.avg_algo0, loran_c_avg_algo_s, 'loran_c_avg_algo_select_cb'),
-					w3_slider('?', 'loran_c.avg_param0', loran_c.avg_param0, 0, 100, 1, 'loran_c_avg_param_cb')
+					w3_slider('', '?', 'loran_c.avg_param0', loran_c.avg_param0, 0, 100, 1, 'loran_c_avg_param_cb')
 				),
 	
-				w3_divs('', 'w3-margin-T-8 w3-margin-R-10',
-					w3_col_percent('', '',
-						w3_input('', 'GRI', 'loran_c.gri1', loran_c.gri1, 'loran_c_gri_cb'), 25
+				w3_divs('w3-margin-T-8 w3-margin-R-10',
+					w3_col_percent('',
+						w3_input('w3-padding-smaller', 'GRI', 'loran_c.gri1', loran_c.gri1, 'loran_c_gri_cb'), 25
 					),
 					w3_select('', 'GRI', 'select', 'loran_c.gri_sel1', 0, gri_s, 'loran_c_gri_select_cb'),
-					w3_slider('Gain (auto-scale)', 'loran_c.gain1', loran_c.gain1, 0, 100, 1, 'loran_c_gain_cb'),
+					w3_slider('', 'Gain (auto-scale)', 'loran_c.gain1', loran_c.gain1, 0, 100, 1, 'loran_c_gain_cb'),
 					w3_select('', 'Averaging', '', 'loran_c.avg_algo1', loran_c.avg_algo1, loran_c_avg_algo_s, 'loran_c_avg_algo_select_cb'),
-					w3_slider('?', 'loran_c.avg_param1', loran_c.avg_param1, 0, 100, 1, 'loran_c_avg_param_cb')
+					w3_slider('', '?', 'loran_c.avg_param1', loran_c.avg_param1, 0, 100, 1, 'loran_c_avg_param_cb')
 				)
 			)
 		);
@@ -365,9 +365,10 @@ function loran_c_controls_setup()
 	ext_tune(100, 'am', ext_zoom.ABS, 8);
 
 	ext_panel_show(controls_html, data_html, null);
+	ext_set_controls_width_height(525, 290);
 	time_display_setup('loran_c');
 
-   // no loran_c_resize() used because id-loran_c-data implicitly uses left:0
+   // no dynamic resize used because id-loran_c-data implicitly uses left:0
 	
 	loran_c_scope = w3_el('id-loran_c-scope');
 	loran_c_scope.ct = loran_c_scope.getContext("2d");
@@ -493,15 +494,17 @@ function loran_c_avg_param_cb(path, slider_val)
 function loran_c_config_html()
 {
 	ext_admin_config(loran_c_ext_name, 'Loran-C',
-		w3_divs('id-loran_c w3-text-teal w3-hide', '',
+		w3_div('id-loran_c w3-text-teal w3-hide',
 			'<b>Loran-C configuration</b>' +
 			'<hr>' +
-			w3_third('', 'w3-container',
-				w3_divs('', 'w3-margin-bottom',
-					w3_input_get('', 'default GRI 0', 'loran_c.gri0', 'w3_num_set_cfg_cb', ''),
-					w3_input_get('', 'default GRI 1', 'loran_c.gri1', 'w3_num_set_cfg_cb', '')
-				), '', ''
-			)
+			w3_div('w3-show-inline-block',
+            w3_div('w3-container w3-show-inline-block|width:200px',
+               w3_divs('w3-margin-bottom',
+                  w3_input_get('', 'default GRI 0', 'loran_c.gri0', 'w3_num_set_cfg_cb', ''),
+                  w3_input_get('', 'default GRI 1', 'loran_c.gri1', 'w3_num_set_cfg_cb', '')
+               )
+            )
+         )
 		)
 	);
 }

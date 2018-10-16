@@ -47,7 +47,7 @@
 //#include <QDir>
 //#include <QDebug>
 
-CFir m_AM_FIR[RX_CHANS];
+CFir m_AM_FIR[MAX_RX_CHANS];
 
 //////////////////////////////////////////////////////////////////////
 // Local Defines
@@ -295,8 +295,8 @@ TYPEREAL Beta;
 	//clamp range of filter taps
 	if(m_NumTaps > MAX_NUMCOEF )
 		m_NumTaps = MAX_NUMCOEF;
-	if(m_NumTaps < 3)
-		m_NumTaps = 3;
+	if(m_NumTaps < 9)
+		m_NumTaps = 9;
 
 	if(NumTaps)	//if need to force to to a number of taps
 		m_NumTaps = NumTaps;

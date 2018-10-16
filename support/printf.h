@@ -1,8 +1,7 @@
 #pragma once
 
 #include "types.h"
-#include "kiwi.h"
-#include "web.h"
+#include "conn.h"
 
 #define panic(s) _panic(s, FALSE, __FILE__, __LINE__);
 #define dump_panic(s) _panic(s, TRUE, __FILE__, __LINE__);
@@ -50,24 +49,13 @@
 #define PRINTF_U64_ARG(arg) \
     (u4_t) ((arg) >> 32), (u4_t) ((arg) & 0xffffffff)
 
-#define N_LOG_MSG_LEN   256
-#define N_LOG_SAVE      256
-typedef struct {
-	int idx, not_shown;
-	char *arr[N_LOG_SAVE];
-	bool malloced[N_LOG_SAVE];
-	char *mbuf[N_LOG_SAVE];
-	char sdr_hu_status[N_LOG_MSG_LEN];
-	char mem[1];	// mem allocated starting here; must be last in struct
-} log_save_t;
-extern log_save_t *log_save_p;
-
 // printf_type: regular or logging (via syslog()) printf
 #define	PRINTF_FLAGS	0xff
 #define PRINTF_REG		0x01
 #define PRINTF_LOG		0x02
 #define PRINTF_MSG		0x04
 #define PRINTF_FF		0x08	// add a "form-feed" to stop appending to 'id-status-msg' on browser
+#define PRINTF_REAL		0x10
 
 // override printf so we can add a timestamp, log it, etc.
 #ifdef KIWI
@@ -78,6 +66,8 @@ extern log_save_t *log_save_p;
 
 #define printf ALT_PRINTF
 void alt_printf(const char *fmt, ...);
+
+void printf_init();
 
 // versions of printf & lprintf that preface message with rx channel
 void cprintf(conn_t *c, const char *fmt, ...);

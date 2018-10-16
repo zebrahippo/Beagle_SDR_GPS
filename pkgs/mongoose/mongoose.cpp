@@ -40,6 +40,7 @@
 #define NS_DISABLE_THREADS
 #define NS_ENABLE_IPV6
 #define MONGOOSE_NO_THREADS
+//#define NS_ENABLE_SSL
 
 #ifndef NS_SKELETON_HEADER_INCLUDED
 #define NS_SKELETON_HEADER_INCLUDED
@@ -2619,6 +2620,12 @@ int mg_websocket_write(struct mg_connection* conn, int opcode,
       retval = mg_write(conn, copy, copy_len);
     }
     free(copy);
+
+    // If we send closing frame, schedule a connection to be closed after
+    // data is drained to the client.
+    if (opcode == 0x08) {
+        MG_CONN_2_CONN(conn)->ns_conn->flags |= NSF_FINISHED_SENDING_DATA;
+    }
 
     return retval;
 }

@@ -71,9 +71,9 @@ struct gps_timestamp_t {
 	double last_gpssec;  // last gps timestamp
 } ;
 
-gps_timestamp_t gps_ts[RX_CHANS];
+gps_timestamp_t gps_ts[MAX_RX_CHANS];
 
-snd_t snd_inst[RX_CHANS];
+snd_t snd_inst[MAX_RX_CHANS];
 
 float g_genfreq, g_genampl, g_mixfreq;
 
@@ -111,11 +111,11 @@ void c2s_sound(void *param)
 	rx_dpump_t *rx = &rx_dpump[rx_chan];
 	
 	int j, k, n, len, slen;
-	static u4_t ncnt[RX_CHANS];
+	//static u4_t ncnt[MAX_RX_CHANS];
 	const char *s;
 	
 	double freq=-1, _freq, gen=-1, _gen, locut=0, _locut, hicut=0, _hicut, mix;
-	int mode=-1, _mode, genattn=0, _genattn, mute;
+	int mode=-1, _mode, genattn=0, _genattn, mute, test=0;
 	int noise_blanker=0, noise_threshold=0, nb_click=0, last_noise_pulse=0;
 	int lms_denoise=0, lms_autonotch=0, lms_de_delay=0, lms_an_delay=0;
 	float lms_de_beta=0, lms_an_beta=0, lms_de_decay=0, lms_an_decay=0;
@@ -158,6 +158,7 @@ void c2s_sound(void *param)
 	int tr_cmds = 0;
 	u4_t cmd_recv = 0;
 	bool cmd_recv_ok = false, change_LPF = false, change_freq_mode = false;
+	bool allow_gps_tstamp = admcfg_bool("GPS_tstamp", NULL, CFG_REQUIRED);
 	
 	memset(&rx->adpcm_snd, 0, sizeof(ima_adpcm_state_t));
 	
@@ -167,16 +168,18 @@ void c2s_sound(void *param)
 	nbuf_t *nb = NULL;
 
 	while (TRUE) {
-		float f_phase;
-		u4_t i_phase;
+		double f_phase;
+		u64_t i_phase;
 		
 		// reload freq NCO if adc clock has been corrected
 		if (freq >= 0 && adc_clk_corrections != clk.adc_clk_corrections) {
 			adc_clk_corrections = clk.adc_clk_corrections;
 			f_phase = freq * kHz / conn->adc_clock_corrected;
-			i_phase = f_phase * pow(2,32);
-			if (do_sdr) spi_set(CmdSetRXFreq, rx_chan, i_phase);
-			//printf("SND%d freq updated due to ADC clock correction\n", rx_chan);
+            i_phase = (u64_t) round(f_phase * pow(2,48));
+            //cprintf(conn, "SND UPD freq %.3f kHz i_phase 0x%08x|%08x clk %.3f\n",
+            //    freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected);
+            if (do_sdr) spi_set3(CmdSetRXFreq, rx_chan, (i_phase >> 16) & 0xffffffff, i_phase & 0xffff);
+		//printf("SND%d freq updated due to ADC clock correction\n", rx_chan);
 		}
 
 		if (nb) web_to_app_done(conn, nb);
@@ -217,9 +220,10 @@ void c2s_sound(void *param)
 				if (freq != _freq) {
 					freq = _freq;
 					f_phase = freq * kHz / conn->adc_clock_corrected;
-					i_phase = f_phase * pow(2,32);
-					//cprintf(conn, "SND FREQ %.3f kHz i_phase 0x%08x\n", freq, i_phase);
-					if (do_sdr) spi_set(CmdSetRXFreq, rx_chan, i_phase);
+                    i_phase = (u64_t) round(f_phase * pow(2,48));
+					//cprintf(conn, "SND SET freq %.3f kHz i_phase 0x%08x|%08x clk %.3f\n",
+					//    freq, PRINTF_U64_ARG(i_phase), conn->adc_clock_corrected);
+					if (do_sdr) spi_set3(CmdSetRXFreq, rx_chan, (i_phase >> 16) & 0xffffffff, i_phase & 0xffff);
 					cmd_recv |= CMD_FREQ;
 					new_freq = true;
 					change_freq_mode = true;
@@ -312,7 +316,7 @@ void c2s_sound(void *param)
 				if (gen != _gen) {
 					gen = _gen;
 					f_phase = gen * kHz / conn->adc_clock_corrected;
-					i_phase = f_phase * pow(2,32);
+					i_phase = (u4_t) round(f_phase * pow(2,32));
 					//printf("sound %d: GEN %.3f kHz phase %.3f 0x%08x\n",
 					//	rx_chan, gen, f_phase, i_phase);
 					if (do_sdr) spi_set(CmdSetGen, 0, i_phase);
@@ -421,6 +425,12 @@ void c2s_sound(void *param)
 			if (n == 1) {
 				//printf("mute %d\n", mute);
 				// FIXME: stop audio stream to save bandwidth?
+				continue;
+			}
+
+			n = sscanf(cmd, "SET test=%d", &test);
+			if (n == 1) {
+				//printf("test %d\n", test);
 				continue;
 			}
 
@@ -576,26 +586,24 @@ void c2s_sound(void *param)
 			const u64_t ticks   = rx->ticks[rx->rd_pos];
 			const u64_t dt      = time_diff48(ticks, clk.ticks);  // time difference to last GPS solution
 #if 0
-			static u64_t last_ticks = 0;
-			static u4_t  tick_seq   = 0;
-			const u64_t diff_ticks = time_diff48(ticks, last_ticks); // time difference to last buffer
+			static u64_t last_ticks[MAX_RX_CHANS] = {0};
+			static u4_t  tick_seq[MAX_RX_CHANS]   = {0};
+			const u64_t diff_ticks = time_diff48(ticks, last_ticks[rx_chan]); // time difference to last buffer
 			
-			if ((tick_seq % 32) == 0) printf("ticks %08x|%08x %08x|%08x // %08x|%08x %08x|%08x #%d,%d GPST %f\n",
+			if ((tick_seq[rx_chan] % 32) == 0) printf("ticks %08x|%08x %08x|%08x // %08x|%08x %08x|%08x #%d,%d GPST %f\n",
 											 PRINTF_U64_ARG(ticks), PRINTF_U64_ARG(diff_ticks),
 											 PRINTF_U64_ARG(dt), PRINTF_U64_ARG(clk.ticks),
 											 clk.adc_gps_clk_corrections, clk.adc_clk_corrections, clk.gps_secs);
-			if (diff_ticks != RX1_DECIM*RX2_DECIM*NRX_SAMPS)
+			if (diff_ticks != RX1_DECIM*RX2_DECIM*nrx_samps)
 				printf("ticks %08x|%08x %08x|%08x // %08x|%08x %08x|%08x #%d,%d GPST %f (%d) *****\n",
 					   PRINTF_U64_ARG(ticks), PRINTF_U64_ARG(diff_ticks),
 					   PRINTF_U64_ARG(dt), PRINTF_U64_ARG(clk.ticks),
 					   clk.adc_gps_clk_corrections, clk.adc_clk_corrections, clk.gps_secs,
-					   tick_seq);
-			last_ticks = ticks;
-			tick_seq++;
+					   tick_seq[rx_chan]);
+			last_ticks[rx_chan] = ticks;
+			tick_seq[rx_chan]++;
 #endif
 			gps_ts[rx_chan].gpssec = fmod(gps_week_sec + clk.gps_secs + dt/clk.adc_clock_base - gps_delay, gps_week_sec);
-			out_pkt_iq.h.last_gps_solution = (clk.ticks == 0 ? 255 : u1_t(std::min(254.0, dt/clk.adc_clock_base)));
-			out_pkt_iq.h.dummy = 0;
 
 		    #ifdef SND_SEQ_CHECK
 		        if (rx->in_seq[rx->rd_pos] != snd->snd_seq) {
@@ -614,7 +622,7 @@ void c2s_sound(void *param)
 			TYPECPX *f_samps = &rx->iq_samples[rx->iq_wr_pos][0];
 			rx->iq_seqnum[rx->iq_wr_pos] = rx->iq_seq;
 			rx->iq_seq++;
-			const int ns_in = NRX_SAMPS;
+			const int ns_in = nrx_samps;
 			
             if (nb_click) {
                 u4_t now = timer_sec();
@@ -631,7 +639,8 @@ void c2s_sound(void *param)
 			gps_ts[rx_chan].fir_pos += ns_in;
 			const int ns_out = m_PassbandFIR[rx_chan].ProcessData(rx_chan, ns_in, i_samps, f_samps);
 			gps_ts[rx_chan].fir_pos -= ns_out;
-
+            // [this diagram was back when the audio buffer was 1/2 its current size and NRX_SAMPS = 84]
+            //
 			// FIR has a pipeline delay:
 			//   gpssec=         t_0    t_1  t_2  t_3  t_4  t_5  t_6  t_7
 			//                    v      v    v    v    v    v    v    v
@@ -641,13 +650,19 @@ void c2s_sound(void *param)
 			// GPS start times of 512 sample buffers:
 			//  * @a : t_0 +  84    (no samples in the FIR buffer)
 			//  * @b : t_7 +  84-76 (there are already 76 samples in the FIR buffer)
+			
 			// real_printf("ns_i,out=%2d|%3d gps_ts.fir_pos=%d\n", ns_in, ns_out, gps_ts[rx_chan].fir_pos); fflush(stdout);
 			if (!ns_out) {
 				continue;
 			}
+			
+			// seems necessary for TDoA using mix of RX4 and RX8 mode Kiwis
+			// don't quite understand why (jks)
+			int corrected_nrx_samps = (fw_sel == FW_SEL_SDR_4RX_4WF)? (nrx_samps/2) : nrx_samps;
+
 			// correct GPS timestamp for offset in the FIR filter
 			//  (1) delay in FIR filter
-			int sample_filter_delays = NRX_SAMPS - gps_ts[rx_chan].fir_pos;
+			int sample_filter_delays = corrected_nrx_samps - gps_ts[rx_chan].fir_pos;
 			//  (2) delay in AGC (if on)
 			if (agc)
 				sample_filter_delays -= m_Agc[rx_chan].GetDelaySamples();
@@ -656,7 +671,13 @@ void c2s_sound(void *param)
 			out_pkt_iq.h.gpssec  = u4_t(gps_ts[rx_chan].last_gpssec);
 			out_pkt_iq.h.gpsnsec = u4_t(1e9*(gps_ts[rx_chan].last_gpssec-out_pkt_iq.h.gpssec));
 			// real_printf("__GPS__ gpssec=%.9f diff=%.9f\n",  gps_ts[rx_chan].gpssec, gps_ts[rx_chan].gpssec-gps_ts[rx_chan].last_gpssec);
+
+			const double dt_to_pos_sol = gps_ts[rx_chan].last_gpssec - clk.gps_secs;
+			out_pkt_iq.h.last_gps_solution = (clk.ticks == 0 ? 255 : u1_t(std::min(254.0, dt_to_pos_sol)));
+			out_pkt_iq.h.dummy = 0;
+
 			gps_ts[rx_chan].last_gpssec = gps_ts[rx_chan].gpssec;
+
 			rx->iq_wr_pos = (rx->iq_wr_pos+1) & (N_DPBUF-1);
 
 			TYPECPX *f_sa = f_samps;
@@ -685,7 +706,7 @@ void c2s_sound(void *param)
 				ext_users[rx_chan].receive_iq(rx_chan, 0, ns_out, f_samps);
 			
 			if (ext_users[rx_chan].receive_iq_tid != (tid_t) NULL && mode != MODE_NBFM)
-				TaskWakeup(ext_users[rx_chan].receive_iq_tid, TRUE, TO_VOID_PARAM(rx_chan));
+				TaskWakeup(ext_users[rx_chan].receive_iq_tid, TWF_CHECK_WAKING, TO_VOID_PARAM(rx_chan));
 
 			TYPEMONO16 *r_samps;
 			
@@ -700,7 +721,12 @@ void c2s_sound(void *param)
 				TYPECPX *a_samps = rx->agc_samples;
 				m_Agc[rx_chan].ProcessData(ns_out, f_samps, a_samps);
 
-				TYPEREAL *d_samps = rx->demod_samples;
+                #define POST_AM_DET_FILTER
+                #ifdef POST_AM_DET_FILTER
+				    TYPEREAL *d_samps = rx->demod_samples;
+                #else
+				    TYPEMONO16 *d_samps = r_samps;
+                #endif
 
 				for (j=0; j<ns_out; j++) {
 					double pwr = a_samps->re*a_samps->re + a_samps->im*a_samps->im;
@@ -712,11 +738,13 @@ void c2s_sound(void *param)
 					d_samps++;
 					a_samps++;
 				}
-				d_samps = rx->demod_samples;
 				
 				// clean up residual noise left by detector
 				// the non-FFT FIR has no pipeline delay issues
-				m_AM_FIR[rx_chan].ProcessFilter(ns_out, d_samps, r_samps);
+                #ifdef POST_AM_DET_FILTER
+                    d_samps = rx->demod_samples;
+				    m_AM_FIR[rx_chan].ProcessFilter(ns_out, d_samps, r_samps);
+                #endif
 
                 // noise processors
 				if (lms_denoise) m_LMS_denoise[rx_chan].ProcessFilter(ns_out, r_samps, r_samps);
@@ -783,7 +811,7 @@ void c2s_sound(void *param)
                     ext_users[rx_chan].receive_real(rx_chan, 0, ns_out, r_samps);
                 
                 if (ext_users[rx_chan].receive_real_tid != (tid_t) NULL)
-                    TaskWakeup(ext_users[rx_chan].receive_real_tid, TRUE, TO_VOID_PARAM(rx_chan));
+                    TaskWakeup(ext_users[rx_chan].receive_real_tid, TWF_CHECK_WAKING, TO_VOID_PARAM(rx_chan));
     
                 if (compression) {
                     encode_ima_adpcm_i16_e8(r_samps, bp_real, ns_out, &rx->adpcm_snd);
@@ -799,7 +827,7 @@ void c2s_sound(void *param)
             }
 			
 			#if 0
-                static u4_t last_time[RX_CHANS];
+                static u4_t last_time[MAX_RX_CHANS];
                 static int nctr;
                 ncnt[rx_chan] += ns_out * (compression? 4:1);
                 int nbuf = ncnt[rx_chan] / SND_RATE;
@@ -821,7 +849,6 @@ void c2s_sound(void *param)
                 }
 			#endif
 		} // bc < 1024
-
 		NextTask("s2c begin");
 				
 		// send s-meter data with each audio packet
@@ -854,6 +881,13 @@ void c2s_sound(void *param)
 
 		//printf("hdr %d S%d\n", sizeof(out_pkt.h), bc); fflush(stdout);
 		if (mode == MODE_IQ) {
+		    // allow GPS timestamps to be seen by internal extensions
+		    // but selectively remove from external connections (see admin page security tab)
+		    if (!allow_gps_tstamp) {
+		        out_pkt_iq.h.last_gps_solution = 0;
+		        out_pkt_iq.h.gpssec = 0;
+		        out_pkt_iq.h.gpsnsec = 0;
+		    }
 			const int bytes = sizeof(out_pkt_iq.h) + bc;
 			app_to_web(conn, (char*) &out_pkt_iq, bytes);
 			audio_bytes += sizeof(out_pkt_iq.h.smeter) + bc;
@@ -864,7 +898,7 @@ void c2s_sound(void *param)
 		}
 
 		#if 0
-			static u4_t last_time[RX_CHANS];
+			static u4_t last_time[MAX_RX_CHANS];
 			u4_t now = timer_ms();
 			printf("SND%d: %d %.3fs seq-%d\n", rx_chan, bytes,
 				(float) (now - last_time[rx_chan]) / 1e3, *seq);
@@ -872,7 +906,7 @@ void c2s_sound(void *param)
 		#endif
 
 		#if 0
-            static u4_t last_time[RX_CHANS];
+            static u4_t last_time[MAX_RX_CHANS];
             static int nctr;
             ncnt[rx_chan] += bc * (compression? 4:1);
             int nbuf = ncnt[rx_chan] / SND_RATE;
@@ -896,4 +930,11 @@ void c2s_sound(void *param)
 
 		NextTask("s2c end");
 	}
+}
+
+void c2s_sound_shutdown(void *param)
+{
+    conn_t *c = (conn_t*)(param);
+    if (c && c->mc)
+        rx_server_websocket(WS_MODE_CLOSE, c->mc);
 }

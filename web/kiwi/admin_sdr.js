@@ -29,17 +29,17 @@ function config_html()
 	var s1 =
 		'<hr>' +
 		w3_third('w3-margin-bottom w3-text-teal w3-restart', 'w3-container',
-			w3_input_get('', 'Initial frequency (kHz)', 'init.freq', 'admin_float_zero_cb'),
-			w3_divs('', 'w3-center',
+			w3_input_get('', 'Initial frequency (kHz)', 'init.freq', 'admin_float_cb'),
+			w3_div('w3-center',
 				w3_select('', 'Initial mode', '', 'init.mode', init_mode, modes_u, 'admin_select_cb')
 			),
-			w3_input_get('', 'Initial zoom (0-11)', 'init.zoom', 'admin_int_zero_cb')
+			w3_input_get('', 'Initial zoom (0-11)', 'init.zoom', 'admin_int_cb')
 		) +
 
 		w3_third('w3-margin-bottom w3-text-teal w3-restart', 'w3-container',
-			w3_input_get('', 'Initial waterfall min (dBFS, fully zoomed-out)', 'init.min_dB', 'admin_int_zero_cb'),
-			w3_input_get('', 'Initial waterfall max (dBFS)', 'init.max_dB', 'admin_int_zero_cb'),
-			w3_divs('', 'w3-center',
+			w3_input_get('', 'Initial waterfall min (dBFS, fully zoomed-out)', 'init.min_dB', 'admin_int_cb'),
+			w3_input_get('', 'Initial waterfall max (dBFS)', 'init.max_dB', 'admin_int_cb'),
+			w3_div('w3-center',
 				w3_select('', 'Initial AM BCB channel spacing', '', 'init.AM_BCB_chan', init_AM_BCB_chan, AM_BCB_chan_i, 'admin_select_cb')
 			)
 		);
@@ -47,46 +47,68 @@ function config_html()
    var s2 =
 		'<hr>' +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
-			w3_divs('w3-restart', '',
-				w3_input_get('', 'Frequency scale offset (kHz)', 'freq_offset', 'admin_int_zero_cb'),
-				w3_divs('', 'w3-text-black',
-					'Adds offset to frequency scale. <br> Useful when using a frequency converter, e.g. <br>' +
-					'set to 116000 kHz when 144-148 maps to 28-32 MHz.'
+			w3_div('w3-restart',
+				w3_input_get('', 'Frequency scale offset (kHz)', 'freq_offset', 'admin_int_cb'),
+				w3_div('w3-text-black',
+					'Adds offset to frequency scale. <br> Useful when using a transverter, e.g. set to <br>' +
+					'116000 kHz when 144-148 maps to 28-32 MHz.'
 				)
 			),
-			w3_input_get('', 'S-meter calibration (dB)', 'S_meter_cal', 'admin_int_zero_cb'),
-			w3_input_get('', 'Waterfall calibration (dB)', 'waterfall_cal', 'admin_int_zero_cb')
+			w3_input_get('', 'S-meter calibration (dB)', 'S_meter_cal', 'admin_int_cb'),
+			w3_input_get('', 'Waterfall calibration (dB)', 'waterfall_cal', 'admin_int_cb')
 		) +
-		w3_quarter('w3-margin-bottom w3-text-teal', 'w3-container',
-			w3_divs('', 'w3-center w3-tspace-8',
+		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
+			w3_div('w3-center w3-tspace-8',
 				w3_select('', 'ITU region', '', 'init.ITU_region', init_ITU_region, ITU_region_i, 'admin_select_cb'),
-				w3_divs('', 'w3-text-black',
+				w3_div('w3-text-black',
 					'Configures LW/NDB, MW and <br> amateur band allocations, etc.'
 				)
 			),
-			w3_divs('w3-restart', 'w3-center w3-tspace-8',
+			w3_divs('w3-restart/w3-center w3-tspace-8',
 				w3_select('', 'Max receiver frequency', '', 'max_freq', max_freq, max_freq_i, 'admin_select_cb'),
-				w3_divs('', 'w3-text-black')
+				w3_div('w3-text-black')
 			),
-			w3_divs('w3-restart', 'w3-center w3-tspace-8',
-				w3_div('', '<b>External ADC clock?</b>'),
-            w3_switch('', 'Yes', 'No', 'ext_ADC_clk', cfg.ext_ADC_clk, 'admin_radio_YN_cb'),
-				w3_div('w3-text-black', 'Set when external 66.6666 MHz clock <br> connected to J5 connector pad.')
-			),
-			w3_divs('w3-restart', 'w3-center w3-tspace-8',
+			w3_divs('w3-restart/w3-center w3-tspace-8',
 				w3_select_get_param('', 'SPI clock', '', 'SPI_clock', SPI_clock_i, 'admin_select_cb', 0),
-				w3_divs('', 'w3-text-black',
+				w3_div('w3-text-black',
 					'Set to 24 MHz to reduce interference <br> on 2 meters (144-148 MHz).'
 				)
 			)
-		);
+		) +
+		'<hr>';
 
+   // FIXME: this should really be in admin.js
+   // don't move it without leaving an explanation since old forum posts may refer to it as being here
    var s3 =
+      w3_div('w3-valign w3-container w3-section',
+         '<header class="w3-container w3-yellow"><h6>' +
+         'If the Kiwi doesn\'t like your external clock you can still connect (user and admin). However the waterfall will be dark and the audio silent.' +
+         '</h6></header>'
+      ) +
+		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
+			w3_divs('w3-restart/w3-center w3-tspace-8',
+				w3_div('', '<b>External ADC clock?</b>'),
+            w3_switch('', 'Yes', 'No', 'ext_ADC_clk', cfg.ext_ADC_clk, 'config_ext_clk_sel_cb'),
+				w3_text('w3-text-black w3-center', 'Set when external 66.666600 MHz (nominal) <br> clock connected to J5 connector/pad.')
+			),
+			w3_divs('w3-restart/w3-tspace-8',
+		      w3_input('', 'External clock frequency (enter in MHz or Hz)', 'ext_ADC_freq', cfg.ext_ADC_freq, 'config_ext_freq_cb'),
+				w3_text('w3-text-black', 'Set exact clock frequency applied. <br> Input value stored in Hz.')
+		   ),
+			w3_divs('w3-restart/w3-center w3-tspace-8',
+				w3_div('', '<b>Enable GPS correction of ADC clock?</b>'),
+            w3_switch('', 'Yes', 'No', 'ADC_clk_corr', cfg.ADC_clk_corr, 'admin_radio_YN_cb'),
+				w3_text('w3-text-black w3-center',
+				   'Set "no" to keep the Kiwi GPS from correcting for <br>' +
+				   'errors in the ADC clock (internal or external).'
+				)
+			)
+		) +
 		'<hr>' +
 		w3_div('w3-container',
-         w3_div('w3-vcenter',
+         w3_div('w3-valign',
             '<header class="w3-container w3-yellow"><h6>' +
-            'To manually adjust/calibrate the ADC clock (e.g. when there is no GPS signal for automatic calibration) follow these steps:' +
+            'To manually adjust/calibrate the ADC clock (e.g. when there is no GPS signal or GPS correction is disabled) follow these steps:' +
             '</h6></header>'
          ),
          
@@ -109,15 +131,44 @@ function config_html()
                '<li>Open IQ display extension</li>' +
                '<li>Set the receive frequency to the exact nominal carrier (e.g. 15000 kHz for WWV)</li>' +
                '<li>Press the <i>40</i> button (i.e. sets mode to AM with 40 Hz passband)</li>' +
+               '<li>Set menus: Draw = points, Mode = carrier, PLL = off</li>' +
                '<li>Adjust the gain until you see a point rotating in a circle</li>' +
                '<li>Use the <i>Fcal</i> buttons to slow the rotation as much as possible</li>' +
+               '<li>The total accumulated Fcal adjustment is shown</li>' +
                '<li>A full rotation in less than two seconds is good calibration</li>' +
             '</ul>'
          )
       ) +
 		'<hr>';
 
-	return w3_divs('id-config w3-hide', '', s1 + s2 + s3);
+	return w3_div('id-config w3-hide', s1 + s2 + s3);
+}
+
+function config_ext_clk_sel_cb(path, idx)
+{
+   idx = +idx;
+   //console.log('config_ext_clk_sel_cb idx='+ idx);
+   admin_radio_YN_cb(path, idx);
+   
+   // force clock adjust to zero when changing external clock select
+   w3_num_set_cfg_cb('cfg.clk_adj', 0);
+}
+
+function config_ext_freq_cb(path, val, first)
+{
+   if (first) return;
+   var f = parseFloat(val);
+   //console.log('config_ext_freq_cb f='+ f);
+   if (isNaN(f)) {
+      f = null;
+   } else {
+      if (f < 70) f *= 1e6;      // convert MHz to Hz
+      else
+      if (f < 70000) f *= 1e3;   // convert kHz to Hz
+      f = Math.floor(f);
+      if (f < 65000000 || f > 69000000) f = null;
+   }
+   admin_int_cb(path, f, first);
 }
 
 
@@ -128,7 +179,7 @@ function config_html()
 function channels_html()
 {
 	var s =
-	w3_divs('id-channels w3-hide', '',
+	w3_div('id-channels w3-hide',
 		'<hr>' +
 
 		w3_third('w3-margin-bottom w3-text-teal w3-restart', 'w3-container',
@@ -149,31 +200,31 @@ function webpage_html()
 {
 	var s1 =
 		'<hr>' +
-		w3_divs('w3-margin-bottom', 'w3-container',
+		w3_divs('w3-margin-bottom/w3-container',
 			w3_input('', 'Top bar title', 'index_html_params.RX_TITLE', '', 'webpage_title_cb')
 		) +
-		w3_divs('', 'w3-container',
+		w3_div('w3-container',
 			'<label><b>Top bar title HTML preview</b></label>',
-			w3_divs('', 'id-webpage-title-preview w3-text-black w3-background-pale-aqua', '')
+			w3_div('id-webpage-title-preview w3-text-black w3-background-pale-aqua', '')
 		) +
 
-		w3_divs('w3-margin-top w3-margin-bottom', 'w3-container',
+		w3_divs('w3-margin-top w3-margin-bottom/w3-container',
 			w3_input('', 'Owner info (appears in center of top bar)', 'owner_info', '', 'webpage_owner_info_cb')
 		) +
-		w3_divs('', 'w3-container',
+		w3_div('w3-container',
 			'<label><b>Owner info HTML preview</b></label>',
-			w3_divs('', 'id-webpage-owner-info-preview w3-text-black w3-background-pale-aqua', '')
+			w3_div('id-webpage-owner-info-preview w3-text-black w3-background-pale-aqua', '')
 		) +
 
-		w3_divs('w3-margin-top w3-margin-bottom', 'w3-container',
+		w3_divs('w3-margin-top w3-margin-bottom/w3-container',
 			w3_input('', 'Status', 'status_msg', '', 'webpage_status_cb')
 		) +
-		w3_divs('', 'w3-container',
+		w3_div('w3-container',
 			'<label><b>Status HTML preview</b></label>',
-			w3_divs('', 'id-webpage-status-preview w3-text-black w3-background-pale-aqua', '')
+			w3_div('id-webpage-status-preview w3-text-black w3-background-pale-aqua', '')
 		) +
 		
-		w3_divs('w3-margin-top', 'w3-container',
+		w3_divs('w3-margin-top/w3-container',
 			w3_input('', 'Window/tab title', 'index_html_params.PAGE_TITLE', '', 'webpage_string_cb')
 		);
 	
@@ -197,12 +248,12 @@ function webpage_html()
 		'<hr>' +
 		w3_half('w3-margin-bottom', 'w3-container',
 			w3_half('', '',
-            w3_divs('', '',
-               w3_label('', 'Photo file'),
+            w3_div('',
+               w3_label('w3-bold', 'Photo file'),
                '<input id="id-photo-file" type="file" accept="image/*" onchange="webpage_photo_file_upload()"/>',
-               w3_divs('', 'id-photo-error', '')
+               w3_div('id-photo-error', '')
             ),
-            w3_checkbox_get_param('w3-restart', 'Photo left margin', 'index_html_params.RX_PHOTO_LEFT_MARGIN', 'admin_bool_cb', true)
+            w3_checkbox_get_param('w3-restart w3-label-inline', 'Photo left margin', 'index_html_params.RX_PHOTO_LEFT_MARGIN', 'admin_bool_cb', true)
          ),
 			w3_input('', 'Photo maximum height (pixels)', 'index_html_params.RX_PHOTO_HEIGHT', '', 'webpage_string_cb')
 		) +
@@ -220,9 +271,9 @@ function webpage_html()
          )
 		) +
 		
-		w3_divs('w3-margin-bottom', 'w3-container', '');		// bottom gap for better scrolling look
+		w3_divs('w3-margin-bottom/w3-container', '');		// bottom gap for better scrolling look
 
-   return w3_divs('id-webpage w3-text-teal w3-hide', '', s1 + s2 + s3);
+   return w3_div('id-webpage w3-text-teal w3-hide', s1 + s2 + s3);
 }
 
 function webpage_input_grid(path, val)
@@ -377,16 +428,16 @@ function webpage_string_cb(path, val)
 function sdr_hu_html()
 {
 	var s1 =
-		w3_divs('', 'w3-tspace-16',
-         w3_div('id-need-gps w3-vcenter w3-hide',
+		w3_div('w3-tspace-16',
+         w3_div('id-need-gps w3-valign w3-hide',
             '<header class="w3-container w3-yellow"><h5>Warning: GPS location field set to the default, please update</h5></header>'
          ),
          
-         w3_div('w3-vcenter',
+         w3_div('w3-valign',
             '<header class="w3-container w3-yellow"><h5>' +
-            'To list your Kiwi on <a href="http://sdr.hu" target="_blank">sdr.hu</a> ' +
+            'To list your Kiwi on <a href="https://sdr.hu" target="_blank">sdr.hu</a> ' +
             'edit the fields below and ' +
-            'obtain an API key from <a href="http://sdr.hu/register" target="_blank">sdr.hu/register</a> ' +
+            'obtain an API key from <a href="https://sdr.hu/register" target="_blank">sdr.hu/register</a> ' +
             'and enter it into the <b>API key</b> field.<br>' +
             'Then set the display switch to <b>Yes</b> and look for a status result of "SUCCESS (update)" after a few minutes. ' +
             'More information on <a href="http://kiwisdr.com/quickstart/index.html#id-sdr_hu" target="_blank">kiwisdr.com</a>' +
@@ -396,11 +447,11 @@ function sdr_hu_html()
 
 		'<hr>' +
 		w3_half('w3-margin-bottom', '',
-			w3_divs('w3-container', '',
-					'<b>Display your KiwiSDR on <a href="http://sdr.hu/?top=kiwi" target="_blank">sdr.hu</a>?</b> ' +
+			w3_div('w3-container',
+					'<b>Display your KiwiSDR on <a href="https://sdr.hu/?top=kiwi" target="_blank">sdr.hu</a>?</b> ' +
 					w3_switch('', 'Yes', 'No', 'adm.sdr_hu_register', adm.sdr_hu_register, 'admin_radio_YN_cb')
 			),
-			w3_divs('w3-container', '',
+			w3_div('w3-container',
 					'<b>Display owner/admin email link on KiwiSDR main page?</b> ' +
 					w3_switch('', 'Yes', 'No', 'contact_admin', cfg.contact_admin, 'admin_radio_YN_cb')
 			)
@@ -440,19 +491,27 @@ function sdr_hu_html()
             ),
 				w3_div('w3-text-black', 'Format: (nn.nnnnnn, nn.nnnnnn)')
 			),
-			w3_input_get('', 'Altitude (ASL meters)', 'rx_asl', 'admin_int_zero_cb')
+			w3_input_get('', 'Altitude (ASL meters)', 'rx_asl', 'admin_int_cb')
 		) +
 
-		w3_half('w3-margin-bottom w3-restart', 'w3-container',
+		w3_half('w3-margin-bottom', 'w3-container',
 		   w3_div('w3-restart', w3_input('', 'API key', 'adm.api_key', '', 'w3_string_set_cfg_cb', 'enter value returned from sdr.hu/register process')),
 		   ''
 		) +
 		w3_half('w3-margin-bottom', 'w3-container',
-         w3_input_get('', 'Coverage frequency low (kHz)', 'sdr_hu_lo_kHz', 'admin_int_zero_cb'),
-         w3_input_get('', 'Coverage frequency high (kHz)', 'sdr_hu_hi_kHz', 'admin_int_zero_cb')
+		   w3_div('',
+            w3_input_get('', 'Coverage frequency low (kHz)', 'sdr_hu_lo_kHz', 'admin_int_cb'),
+				w3_div('w3-text-black',
+				   'These two settings effect the frequency coverage label displayed on sdr.hu <br>' +
+				   'e.g. when set to 0 and 30000 sdr.hu shows "HF". If you\'re using a transverter <br>' +
+				   'then appropriate entries will cause "2m" or "70cm" to be shown. Other labels will be <br>' +
+				   'shown if you limit the range at HF due to antenna or filtering limitations.'
+				)
+			),
+         w3_input_get('', 'Coverage frequency high (kHz)', 'sdr_hu_hi_kHz', 'admin_int_cb')
       );
 
-	return w3_divs('id-sdr_hu w3-text-teal w3-hide', '', s1 + s2);
+	return w3_div('id-sdr_hu w3-text-teal w3-hide', s1 + s2);
 }
 
 var sdr_hu_interval;
@@ -570,12 +629,165 @@ function sdr_hu_update(p)
 function dx_html()
 {
 	var s =
-	w3_divs('id-dx w3-hide', '',
-		'<hr>' +
-		w3_divs('w3-container', '', 'TODO: dx list editing...') +
-		'<hr>'
+	w3_div('id-dx w3-hide',
+	   w3_div('w3-container w3-margin-top', 'TODO..')
+	   /*
+		w3_inline('w3-halign-space-between/w3-margin-top',
+			w3_inline('/w3-margin-between-16',
+				w3_button('w3-yellow', 'Modify', 'dx_modify_cb'),
+				w3_button('w3-green', 'Add', 'dx_add_cb'),
+				w3_button('w3-red', 'Delete', 'dx_delete_cb')
+			),
+		   w3_input('w3-text-teal/w3-label-inline/w3-padding-small|width:300px', 'Filter', 'dxo.filter', '', 'dx_filter_cb')
+		),
+		
+		w3_div('w3-container w3-margin-top w3-margin-bottom w3-card-8 w3-round-xlarge w3-pale-blue',
+         w3_div('id-dx-list-legend'),
+         
+         // reminder: "70vh" means 70% of the viewport (browser window) height
+         w3_div('id-dx-list w3-margin-bottom|height:70vh;overflow-x:hidden;overflow-y:hidden')
+      )
+      */
 	);
 	return s;
+}
+
+function dx_focus()
+{
+   console.log('### dx_focus: SET GET_DX_JSON');
+   w3_innerHTML('id-dx-list-legend', '');
+   w3_el('id-dx-list').style.overflowY = 'hidden';
+   w3_innerHTML('id-dx-list',
+      w3_div('w3-show-inline-block w3-relative|top:45%;left:45%',
+         w3_icon('', 'fa-refresh fa-spin', 48, 'teal'),
+         w3_div('id-dx-list-count w3_text_black')
+      )
+   );
+   
+	ext_send('SET GET_DX_JSON');
+}
+
+function dx_hide()
+{
+}
+
+var dxo = {
+};
+
+function dx_json(dx)
+{
+   /*
+   var i, len = dx.dx.length;
+   console.log('### dx_json: entries='+ len);
+   w3_innerHTML('id-dx-list-count', 'loading '+ len +' entries');
+   
+   // if this isn't delayed the above innerHTML set of id-dx-list-count doesn't render
+   setTimeout(function() { dx_json2(dx); }, 100);
+   */
+}
+
+function dx_json2(dx)
+{
+   var i, len = dx.dx.length;
+   var s = '';
+   
+   dxo.tags = [];
+
+   //for (i = -1; i < len; i++) {
+   for (i = -1; i < 4; i++) {
+      var d = null;
+      var fr = '', mo = 0, id = '', no = '';
+      var pb = '', ty = 0, os = '', ext = '';
+      var ts = 0, tag = '';
+      var hide = (i == -1)? 'w3-hide ':'';
+      
+      // this is so all the s_new code can be reused to construct the legend
+      var h = function(psa) { return (i == -1)? 'w3-hide' : psa; }
+      var l = function(label) { return (i == -1)? label : ''; }
+      if (i != -1) {
+         d = dx.dx[i];
+         fr = d[0];
+         mo = modes_s[d[1].toLowerCase()];
+         id = decodeURIComponent(d[2]);
+         no = decodeURIComponent(d[3]);
+         ts = d[4];
+         tag = d[5];
+         dxo.tags[i] = tag;
+         
+         var lo = 0, hi = 0;
+         var opt = d[6];
+         if (opt) {
+            if (opt.WL == 1) ty = types_s.watch_list; else
+            if (opt.SB == 1) ty = types_s.sub_band; else
+            if (opt.DG == 1) ty = types_s.DGPS; else
+            if (opt.NoN == 1) ty = types_s.NoN; else
+            if (opt.XX == 1) ty = types_s.interference; else
+            ty = 0;
+
+            if (opt.lo) lo = +opt.lo;
+            if (opt.hi) hi = +opt.hi;
+            if (opt.o) os = opt.o;
+            if (opt.p) ext = opt.p;
+         }
+
+         if (lo || hi) {
+            if (lo == -hi) {
+               pb = (Math.abs(hi)*2).toFixed(0);
+            } else {
+               pb = lo.toFixed(0) +', '+ hi.toFixed(0);
+            }
+         }
+
+      }
+      
+      // 'path'+i so path id is unique for field highlight
+      console.log('i='+ i +' mo='+ mo +' ty='+ ty);
+      console.log(d);
+      var s_new =
+         w3_divs('w3-text-teal/w3-margin-T-8',
+            w3_col_percent('',
+               w3_col_percent('w3-valign/w3-hspace-16',
+                  //w3_text('w3-text-black w3-tiny', tag), 5,
+                  (i == -1)? '' : w3_button('w3-font-fixed w3-padding-tiny w3-selection-green', '+', 'dx_add_cb', i), 1,
+                  (i == -1)? '' : w3_button('w3-font-fixed w3-padding-tiny w3-red', '-', 'dx_rem_cb', i), 1,
+                  w3_input(h('w3-padding-small||size=8'), l('Freq'), 'dxo.f_'+i, fr, 'dx_num_cb'), 19,
+                  w3_select(h(''), l('Mode'), '', 'dxo.m_'+i, mo, modes_u, 'dx_sel_cb'), 19,
+                  w3_input(h('w3-padding-small||size=4'), l('Passband'), 'dxo.pb_'+i, pb, 'dx_passband_cb'), 19,
+                  w3_select(h(''), l('Type'), '', 'dxo.y_'+i, ty, types, 'dx_sel_cb'), 19,
+                  w3_input(h('w3-padding-small||size=2'), l('Offset'), 'dxo.o_'+i, os, 'dx_num_cb'), 19
+               ), 45,
+               w3_col_percent('w3-valign/w3-margin-left',
+                  w3_input(h('w3-padding-small'), l('Ident'), 'dxo.i_'+i, id, 'dx_string_cb'), 40,
+                  w3_input(h('w3-padding-small'), l('Notes'), 'dxo.n_'+i, no, 'dx_string_cb'), 40,
+                  w3_input(h('w3-padding-small'), l('Extension'), 'dxo.p_'+i, ext, 'dx_string_cb'), 20
+               ), 54
+            )
+         );
+      
+      if (i == -1) {
+         w3_innerHTML('id-dx-list-legend', s_new);
+      } else {
+         s += s_new;
+      }
+   }
+   w3_el('id-dx-list').style.overflowY = 'scroll';
+   //console.log('render =====================');
+   w3_innerHTML('id-dx-list', s);
+}
+
+function dx_filter_cb(path, p)
+{
+   console.log('dx_filter_cb p='+ p);
+}
+
+function dx_add_cb(path, p)
+{
+   console.log('dx_add p='+ p);
+}
+
+function dx_rem_cb(path, p)
+{
+   console.log('dx_rem p='+ p);
 }
 
 
@@ -586,9 +798,9 @@ function dx_html()
 function extensions_html()
 {
 	var s =
-	w3_divs('id-admin-ext w3-hide w3-section', '',
-		'<nav class="id-admin-ext-nav w3-sidenav w3-light-grey"></nav>' +
-		w3_divs('id-admin-ext-config', '')
+	w3_div('id-admin-ext w3-hide w3-section',
+      w3_sidenav('id-admin-ext-nav'),
+		w3_div('id-admin-ext-config')
 	);
 	return s;
 }
@@ -603,7 +815,8 @@ function ext_admin_config(id, nav_name, ext_html, focus_blur_cb)
 
 	var ci = ext_seq % admin_colors.length;
 	w3_el('id-admin-ext-nav').innerHTML +=
-		w3_nav(admin_colors[ci] + ((ci&1)? ' w3-css-lightGray':''), nav_name, id, focus_blur_cb);
+		//w3_nav(admin_colors[ci] + ((ci&1)? ' w3-css-lightGray':''), nav_name, id, focus_blur_cb);
+		w3_nav(admin_colors[ci] + ' w3-border', nav_name, id, focus_blur_cb);
 	ext_seq++;
-	w3_el('id-admin-ext-config').innerHTML += ext_html;
+	w3_el('id-admin-ext-config').innerHTML += w3_div('w3-show-inline-block', ext_html);
 }

@@ -17,7 +17,7 @@
 //#define DEBUG_MSG	true
 #define DEBUG_MSG	false
 
-// rx_chan is the receiver channel number we've been assigned, 0..RX_CHAN
+// rx_chan is the receiver channel number we've been assigned, 0..rx_chans
 // We need this so the extension can support multiple users, each with their own S_meter[] data structure.
 
 typedef struct {
@@ -25,7 +25,7 @@ typedef struct {
 	int run;
 } S_meter_t;
 
-static S_meter_t S_meter[RX_CHANS];
+static S_meter_t S_meter[MAX_RX_CHANS];
 
 void S_meter_data(int rx_chan, float S_meter_dBm)
 {
@@ -39,7 +39,7 @@ bool S_meter_msgs(char *msg, int rx_chan)
 	S_meter_t *e = &S_meter[rx_chan];
 	int n;
 	
-	printf("### S_meter_msgs RX%d <%s>\n", rx_chan, msg);
+	//printf("### S_meter_msgs RX%d <%s>\n", rx_chan, msg);
 	
 	if (strcmp(msg, "SET ext_server_init") == 0) {
 		e->rx_chan = rx_chan;	// remember our receiver channel number

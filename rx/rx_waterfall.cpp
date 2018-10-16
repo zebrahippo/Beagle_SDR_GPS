@@ -93,18 +93,18 @@ static struct wf_t {
 	u2_t wf2fft_map[WF_WIDTH];							// map is 1:1 with plot
 	int start, prev_start, zoom, prev_zoom;
 	int mark, speed, fft_used_limit;
-	bool new_map, new_map2, compression;
+	bool new_map, new_map2, compression, isWF, isFFT;
 	int flush_wf_pipe;
 	int noise_blanker, noise_threshold, nb_click;
 	u4_t last_noise_pulse;
 	SPI_MISO hw_miso;
-} wf_inst[WF_CHANS];
+} wf_inst[MAX_RX_CHANS];        // NB: MAX_RX_CHANS even though there may be fewer MAX_WF_CHANS
 
 static struct fft_t {
 	fftwf_plan hw_dft_plan;
 	fftwf_complex *hw_c_samps;
 	fftwf_complex *hw_fft;
-} fft_inst[WF_CHANS];
+} fft_inst[MAX_WF_CHANS];       // NB: MAX_WF_CHANS not MAX_RX_CHANS
 
 struct wf_pkt_t {
 	char id4[4];
@@ -133,12 +133,10 @@ void c2s_waterfall_init()
 {
 	int i;
 	
-	assert(RX_CHANS == WF_CHANS);
-	
 	// do these here, rather than the beginning of c2s_waterfall(), because they take too long
 	// and cause the data pump to overrun
 	fft_t *fft;
-	for (fft = fft_inst; fft < &fft_inst[WF_CHANS]; fft++) {
+	for (fft = fft_inst; fft < &fft_inst[MAX_WF_CHANS]; fft++) {
 		fft->hw_c_samps = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * (WF_C_NSAMPS));
 		fft->hw_fft = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * (WF_C_NFFT));
 		fft->hw_dft_plan = fftwf_plan_dft_1d(WF_C_NSAMPS, fft->hw_c_samps, fft->hw_fft, FFTW_FORWARD, FFTW_MEASURE);
@@ -192,8 +190,8 @@ void c2s_waterfall_setup(void *param)
 	send_msg(conn, SM_WF_DEBUG, "MSG kiwi_up=1");
 	extint_send_extlist(conn);
 
-	send_msg(conn, SM_WF_DEBUG, "MSG wf_fft_size=1024 wf_fps=20 zoom_max=%d rx_chans=%d rx_chan=%d color_map=%d wf_setup",
-		MAX_ZOOM, RX_CHANS, rx_chan, color_map? (~conn->ui->color_map)&1 : conn->ui->color_map);
+	send_msg(conn, SM_WF_DEBUG, "MSG wf_fft_size=1024 wf_fps=20 zoom_max=%d rx_chans=%d wf_chans=%d rx_chan=%d color_map=%d wf_setup",
+		MAX_ZOOM, rx_chans, wf_chans, rx_chan, color_map? (~conn->ui->color_map)&1 : conn->ui->color_map);
 	if (do_gps && !do_sdr) send_msg(conn, SM_WF_DEBUG, "MSG gps");
 }
 
@@ -202,7 +200,6 @@ void c2s_waterfall(void *param)
 	conn_t *conn = (conn_t *) param;
 	int rx_chan = conn->rx_channel;
 	wf_t *wf;
-	fft_t *fft;
 	int i, j, k, n;
 	//float adc_scale_samps = powf(2, -ADC_BITS);
 
@@ -221,21 +218,20 @@ void c2s_waterfall(void *param)
 	u4_t ka_time = timer_sec();
 	int adc_clk_corrections = 0;
 	
-	assert(rx_chan < WF_CHANS);
 	wf = &wf_inst[rx_chan];
 	memset(wf, 0, sizeof(wf_t));
 	wf->conn = conn;
 	wf->compression = true;
-
-	fft = &fft_inst[rx_chan];
+	wf->isWF = (rx_chan < wf_chans);
+	wf->isFFT = !wf->isWF;
 
     wf->mark = timer_ms();
     wf->prev_start = wf->prev_zoom = -1;
     
 	#define SO_IQ_T 4
 	assert(sizeof(iq_t) == SO_IQ_T);
-	#if !((NWF_SAMPS * SO_IQ_T) <= NSPI_RX)
-		#error !((NWF_SAMPS * SO_IQ_T) <= NSPI_RX)
+	#if !((NWF_SAMPS * SO_IQ_T) <= SPIBUF_B)
+		#error !((NWF_SAMPS * SO_IQ_T) <= SPIBUF_B)
 	#endif
 
 	//clprintf(conn, "W/F INIT conn: %p mc: %p %s:%d %s\n",
@@ -252,7 +248,8 @@ void c2s_waterfall(void *param)
 			off_freq = start * HZperStart;
 			i_offset = (u4_t) (s4_t) (off_freq / conn->adc_clock_corrected * pow(2,32));
 			i_offset = -i_offset;
-			spi_set(CmdSetWFFreq, rx_chan, i_offset);
+			if (wf->isWF)
+			    spi_set(CmdSetWFFreq, rx_chan, i_offset);
 			//printf("WF%d freq updated due to ADC clock correction\n", rx_chan);
 		}
 
@@ -352,14 +349,15 @@ void c2s_waterfall(void *param)
 					if (wf->noise_blanker) {
 					    //u4_t srate = round(conn->adc_clock_corrected) / (1 << (zoom+1));
 					    u4_t srate = WF_C_NSAMPS * 2;   // FIXME: what's the correct value to use?
-					    printf("NB WF Z-change z%d sr=%d\n", zoom, srate);
+					    //printf("NB WF Z-change z%d sr=%d\n", zoom, srate);
                         m_NoiseProc[rx_chan][NB_WF].SetupBlanker("WF", (float) wf->noise_threshold, (float) wf->noise_blanker, srate);
                     }
                     
 					// when zoom changes reevaluate if overlapped sampling might be needed
 					overlapped_sampling = false;
 					
-					spi_set(CmdSetWFDecim, rx_chan, decim);
+			        if (wf->isWF)
+					    spi_set(CmdSetWFDecim, rx_chan, decim);
 					
 					// We've seen cases where the w/f connects, but the sound never does.
 					// So have to check for conn->other being valid.
@@ -403,7 +401,8 @@ void c2s_waterfall(void *param)
 						zoom, off_freq/kHz, i_offset);
 					#endif
 					
-					spi_set(CmdSetWFFreq, rx_chan, i_offset);
+			        if (wf->isWF)
+					    spi_set(CmdSetWFFreq, rx_chan, i_offset);
 					do_send_msg = TRUE;
 					//jksd
 					//printf("START s=%d ->s=%d\n", start, wf->start);
@@ -477,7 +476,7 @@ void c2s_waterfall(void *param)
                 if (wf->noise_blanker) {
                     //u4_t srate = round(conn->adc_clock_corrected) / (1 << (zoom+1));
 					u4_t srate = WF_C_NSAMPS * 2;   // FIXME: what's the correct value to use?
-                    printf("NB WF ON usec=%d th=%d z%d sr=%d\n", wf->noise_blanker, wf->noise_threshold, zoom, srate);
+                    //printf("NB WF ON usec=%d th=%d z%d sr=%d\n", wf->noise_blanker, wf->noise_threshold, zoom, srate);
                     m_NoiseProc[rx_chan][NB_WF].SetupBlanker("WF", (float) wf->noise_threshold, (float) wf->noise_blanker, srate);
                 }
 				continue;
@@ -579,6 +578,12 @@ void c2s_waterfall(void *param)
 			cmd_recv_ok = true;
 		}
 		
+        if (wf->isFFT) {
+            TaskSleepMsec(250);
+            continue;
+        }
+		
+	    fft_t *fft = &fft_inst[rx_chan];
 		wf->fft_used = WF_C_NFFT / WF_USING_HALF_FFT;		// the result is contained in the first half of a complex FFT
 		
 		// if any CIC is used (z != 0) only look at half of it to avoid the aliased images
@@ -1044,7 +1049,7 @@ if (i == 516) printf("\n");
 
 	app_to_web(wf->conn, (char*) &out, SO_OUT_HDR + bytes);
 	waterfall_bytes += bytes;
-	waterfall_frames[RX_CHANS]++;
+	waterfall_frames[rx_chans]++;       // [rx_chans] is the sum of all waterfalls
 	waterfall_frames[rx_chan]++;
 	evWF(EC_EVENT, EV_WF, -1, "WF", "compute_frame: done");
 
@@ -1055,4 +1060,11 @@ if (i == 516) printf("\n");
 			(float) (now - last_time[rx_chan]) / 1e3, out.seq);
 		last_time[rx_chan] = now;
 	#endif
+}
+
+void c2s_waterfall_shutdown(void *param)
+{
+    conn_t *c = (conn_t*)(param);
+    if (c && c->mc)
+        rx_server_websocket(WS_MODE_CLOSE, c->mc);
 }

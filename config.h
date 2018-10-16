@@ -26,16 +26,26 @@ Boston, MA  02110-1301, USA.
 // LOGGING_HOST, KIWI_UI_LIST, REPO
 // {EDATA_DEVEL, EDATA_EMBED}
 
+#define FW_SEL_SDR_4RX_4WF  0
+#define FW_SEL_SDR_8RX_2WF  1
+
+#define MAX_RX_CHANS    8
+#define MAX_WF_CHANS    4
+#define MAX_NRX_BUFS    8
+#define MAX_NRX_SAMPS   170
+
+extern int fw_sel, fpga_id, rx_chans, wf_chans, nrx_bufs, nrx_samps, nrx_samps_loop, nrx_samps_rem;
+
 // backup values only if dig lookup fails
 #define KIWISDR_COM_PUBLIC_IP   "50.116.2.70"
-#define SDR_HU_PUBLIC_IP        "174.138.38.40"
+#define SDR_HU_PUBLIC_IP        "167.99.214.222"
 
 // INET6_ADDRSTRLEN (46) plus some extra in case ipv6 scope/zone is an issue
 // can't be in net.h due to #include recursion problems
 #define NET_ADDRSTRLEN      64
 #define NET_ADDRSTRLEN_S    "64"
 
-#define	N_EXT	16		// max # of different extensions
+#define	N_EXT	32		// max # of different extensions
 
 #define	STATS_INTERVAL_SECS			10
 

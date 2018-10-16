@@ -1,6 +1,275 @@
 CHANGE_LOG
 
 For the Github commit log see here: https://github.com/jks-prv/Beagle_SDR_GPS/commits/master
+ 
+v1.239  October 14, 2018
+    User interface improvements:
+        'x' and 'y' shortcut keys toggle control panel, top bar visibility respectively.
+ 
+v1.238  October 7, 2018
+    TDoA extension:
+        Changed mapping provider. BETA TEST. There are known problems, but it is better
+        than the currently broken Google map. Use "gmap:" in URL to use old Google maps,
+        e.g. "?ext=tdoa,gmap:"
+ 
+v1.237  October 2, 2018
+    Fix bug causing server crash-loop on update if WSPR auto-run enabled.
+ 
+v1.236  October 1, 2018
+    Changed timezone lookup providers.
+ 
+v1.235  September 30, 2018
+    Christoph's fixes for clean web socket connection closing.
+ 
+v1.234  September 29, 2018
+    Increase receiver DDC channel NCO phase word width from 32 to 48 bits.
+        This stops all rotation of (ground wave) LF/VLF signals on the IQ extension display
+        caused by increased quantization of NCO phase for low receive frequencies when
+        a phase word of only 32-bits is used.
+
+v1.233  September 28, 2018
+    Fixed precision bug in mixer NCO value computation.
+
+v1.232  September 25, 2018
+    TDoA extension improvements:
+        New checkbox to select Christoph's improved TDoA algorithm. Original algorithm still available.
+            To select in URL use "new:" e.g. "... &ext=tdoa, ... ,new:,submit:"
+
+v1.231  September 22, 2018
+    Add "click to start" overlay now that Safari 12 implements auto-play restrictions.
+
+v1.230  September 19, 2018
+    CW decoder: add filter output graph with threshold indicator.
+    Fix Google timezone lookups.
+
+v1.229  September 18, 2018
+    CW decoder extension improvements:
+        Require 4 decoding errors before re-train. (previously just 1)
+        Added error count indicator.
+        Specifying extension argument fixes decoder filter frequency and disables passband tracking.
+            e.g. my_kiwi:8073/?ext=cw,500
+    In addition to specifying passband "/pbw" and "/lo,hi" in URL and frequency entry box
+        can now also specify ":pbc" and ":pbc,pbw" to easily change passband center.
+    Added event notification API for the benefit of CATSync.
+
+v1.226,227,228  September 17, 2018
+    CW decoder extension improvements:
+        Realtime fixes.
+        Added checkbox for "word space correction".
+            Change when spacing between words is consistently wrong.
+        Added checkbox for "threshold correction".
+            Checking seems to help with weak signal decoding.
+        Added a button which resets the code.
+        Added a "train" indicator that lights when code speed training is active.
+
+v1.225  September 16, 2018
+    CW decoder extension fixes.
+
+v1.224  September 15, 2018
+    Added CW decoder extension.
+
+v1.223  September 12, 2018
+    CIC filter compensation via empirical measurement.
+    Minor TDoA UI improvements.
+
+v1.222  September 11, 2018
+    Re-enabled the AM post-detector FIR filter after fixing the underlying problem as the
+        FIR filter is needed to workaround the known issue with CIC filter droop.
+    TDoA extension improvements:
+        "rerun" button: reruns the TDoA calculation using the existing samples.
+            Useful when you just want to adjust the map position/zoom or remove a
+            station's samples from the list and then recalculate.
+        If any of the TDoA result maps are selected when the submit or rerun buttons
+            are pressed then the position/zoom of the result map is used for the new run.
+            Previously only the Kiwi map position/zoom was ever used.
+            
+
+v1.220,221  September 9, 2018
+    Added audio FFT in the waterfall/spectrum for those channels where the regular
+        multi-level zoom waterfall/spectrum is not available.
+
+v1.219  August 30, 2018
+    Christoph's fix for web socket close.
+    Update Galileo sat list.
+    Admin control tab option to disable all waterfall/spectrum display.
+        By request. This option saves Internet bandwidth.
+        Doesn't include audio FFT waterfall which consumes no additional Internet bandwidth.
+
+v1.218  August 20, 2018
+    Solution for the GPS "diminishing fixes" problem.
+
+v1.217  August 20, 2018
+    Fixed negative passband values in URL.
+
+v1.216  August 7, 2018
+    All 12 GPS channels now support any satellite type (Navstar/QZSS/Galileo).
+    Do URL redirect if configured and Kiwi is marked down.
+
+v1.215  August 3, 2018
+    New admin config parameters to set external ADC clock frequency and GPS correction.
+    Other ADC clock control improvements in IQ extension and "cal ADC clock" menu item.
+    Fix race causing incorrect inactivity timeouts under certain circumstances.
+    Passband can be specified in the "f=" URL parameter, format same as frequency entry box.
+        See: http://kiwisdr.com/quickstart/index.html#id-user-tune
+        This is an alternative to specifying the passband alone with "pbw=" or "pb=" parameters.
+
+v1.214  August 1, 2018
+    TDoA extension improvements:
+        Fix for TDoA with a mix of RX4 and RX8 mode Kiwis (GPS timestamp offset).
+        Get reference station list from kiwisdr.com instead of hardwired in code.
+        Keep selected Kiwi and reference markers out of marker clusters.
+
+v1.213  July 31, 2018
+    RX8WF2 mode
+        Fix detection of all channels busy.
+        Added "no_wf" URL parameter to force non-waterfall channel to be used, e.g.
+            my_kiwi:8073/?ext=wspr,40m&mute&no_wf
+        In the users list option tab show our channel number in green to distinguish from others.
+
+v1.212  July 30, 2018
+    Beta test of RX8WF2 mode: more receiver channels.
+        See the new "mode" tab on the admin page for details.
+
+v1.211  July 25, 2018
+    Fix TDoA channel limit bug.
+
+v1.210  July 25, 2018
+    Correct dictionary-order sort of extension names in lists and menus.
+    TDoA extension improvements:
+        Added reference station categories.
+        Admin page extensions tab lets you limit number of channel used by TDoA service.
+        Admin page security tab lets you disable sending GPS timestamps completely.
+        Moved "TDoA ID" setting from sdr.hu tab to TDoA tab on extensions page
+        Updated help info.
+
+v1.209  July 22, 2018
+    TDoA extension improvements:
+        When TDoA complete automatically switch to result map.
+        Switch option bar to 'off' (and restore) when TDoA running. Obscures the map less.
+        Option checkboxes moved to right of map display.
+        Added checkboxes to show/hide reference stations and day/night overlay.
+        Added more references stations.
+    Fix passband width adjustment when passband is offset from carrier (i.e. ssb, cw)
+    Use pointer cursor for menus and checkboxes.
+
+v1.208  July 21, 2018
+    Commas in frequency entry field work again (broken since keyboard shortcuts added).
+    Can now quickly change passband via entry in frequency entry field:
+        Type "freq/pbw" or just "/pbw" where pbw is the passband width in Hz
+        or the low and high edges with "low,high".
+        Examples:
+        1234.56             set f=1234.56 as usual
+        1234,56             set f=1234.56 using comma as decimal separator
+        234.56/1200         set f=234.56 and pbw=1200 around current pb center
+        /600                set pbw=600
+        /300,3000           set pb=(300,3000) i.e. usb 2700 Hz wide
+        7255/-2600,-300     set f=7255 and pbw=(-2600,-300) i.e. lsb 2300 Hz wide
+    Facility added to load certain javascript asynchronously (e.g. Google maps).
+    
+    TDoA extension improvements:
+        New URL parameter "submit:" that will automatically start TDoA on webpage load.
+            e.g. ...?ext=tdoa,submit:,F1JEK,DL6ECS,SWL/JO21JN,DCF77
+            There is a 6 second delay for the initial status inquiries to complete.
+        6 character grid square used for ID instead of old "KiwiNNN" (Thanks Martin).
+        Duplicate IDs distinguished by appending /N to the ID (N = 2,3,...)
+        Multiple Kiwis at identical locations on map dithered slightly so all are visible.
+        More reliable communications protocol with server should prevent hangs.
+        Submit button changes to a stop button while TDoA running (feature may still have bugs).
+        "Most likely position" marker now shown on result maps.
+            This in addition to reference position if one has been specified.
+        Most likely position lat/lon shown at panel top along with cyan Google map link.
+            Triple-click on lat/lon value to copy/paste.
+        Green link icon at panel top has URL with current TDoA extension configuration
+            Right-click while hovered on link to create configuration bookmark or
+            click to open in a new tab/window (less useful).
+            Link is continuously updated as map is changed, host list changed etc.
+        After sampling each host shows a download icon for the recorded .wav IQ file.
+
+v1.207  July 17, 2018
+    TDoA extension improvements:
+        Allow extension parameters in URL, e.g.
+            ...?ext=tdoa,lat:49,lon:7.5,z:6,F1JEK,DL6ECS,DCF77
+            Will zoom the map to specified lat/lon/zoom and select specified Kiwis and ref station.
+            lat/lon/zoom is displayed at control panel upper right for reference.
+        Cluster markers when they are too close together:
+            Hover mouse over cluster for list of markers it contains.
+            A cluster single-click zooms +1.
+            A cluster double-click zooms in to reveal all the markers.
+        Show Kiwi markers on new maps (just like they are shown on old maps).
+        Second double-click of reference marker goes back to last map position/zoom.
+        Kiwi map type selected is carried to result map type.
+        Added additional reference stations:
+            WWV/B, NMC, KPH, JJY/40/60, NDT/JJI, NDI, JXN, VTX3/4, DCF49/HGA22/DCF39, DDH47
+
+v1.206  July 16, 2018
+    TDoA extension improvements:
+        On selection detect Kiwi offline or requiring password.
+        Added additional reference stations.
+
+v1.205  July 15, 2018
+    TDoA extension improvements:
+        Improved error detection and messages.
+        Update help content.
+
+v1.204  July 14, 2018
+    Doh..
+
+v1.203  July 14, 2018
+    TDoA extension improvements:
+        New mode: plot results on a Google map
+        Add distance scale to map.
+        Kiwi list UI improvements.
+    Fixed bug in audio recorder when using IQ mode.
+
+v1.202  July 13, 2018
+    TDoA extension improvements:
+        Better error message when out-of-memory.
+        Added additional reference stations.
+    Fixed bug where local time displayed the same as UTC.
+
+v1.201  July 12, 2018
+    TDoA extension improvements:
+        Highlight Kiwi markers (while -> yellow) selected for sampling list.
+        Added additional reference stations.
+        
+v1.200  July 11, 2018
+    TDoA extension improvements:
+        Double-click reference station markers to zoom in/out.
+        Map reference location field where custom lat, lon and name can be entered.
+        Can select Google map type.
+
+v1.199  July 10, 2018
+    TDoA extension improvements:
+        Allow Google map zoom level 3.
+        Add more info to station tooltip (user count, antenna description).
+
+v1.198  July 9, 2018
+    TDoA extension improvements:
+        Require minimum map zoom.
+        On startup Kiwis appear on map sooner.
+    Trying different audio recording icons.
+
+v1.197  July 8, 2018
+    TDoA extension improvements:
+        Kiwi markers set dynamically based on GPS activity.
+        Added more known LF/VLF targets.
+        New “TDoA id” field on sdr.hu tab of admin page.
+        Set this to alter your Kiwi’s TDoA map marker label.
+    Added audio recording button (left of mute icon) thanks to code from Daniel Ekmann.
+
+v1.196  July 7, 2018
+    Added TDoA-service extension. Under development.
+    Fixed bug that reduced the frequency of GPS solutions under certain conditions.
+    Include GPS good/fix counts in /status URL query.
+    Add URL args to redirect URL, e.g. a connection to mykiwi:8073/?f=5000 will redirect to
+        mykiwi:8074/?f=5000 if mykiwi:8074 is the configured redirect URL (thanks PK).
+    Support Ethernet / WiFi virtual interfaces, e.g. eth0:1
+        Some people use this to implement dual IPv4/IPv6 local networks.
+    Major w3_util API cleanup including update from W3.css v2.65 to v3.4
+    Disable keyboard shortcuts for Firefox <= v52, Chrome <= v49 and Opera <= v36 due to
+        browser compatibility problems.
+    Use a build directory outside the source tree so that source files can be shared between
+        a development machine and the Kiwi Beagle (e.g. files shared with NFS).
 
 v1.195  May 18, 2018
     Fix frequency field input on older versions of iOS.
@@ -267,7 +536,7 @@ v1.137  Oct 16, 2017
     Security improvements:
         No more storage of admin password in cookies.
         Create file kiwi.config/opt.no_console to disable root console capability completely.
-        File kiwi.config/opt.admin_ip can limit admin connections to single ipv4/ipv6 address
+        File kiwi.config/opt.admin_ip can limit admin connections to a single ipv4/ipv6 address
         on the local network (put ip address in file).
         Note: for security reasons it makes no sense to put these options _in_ the admin webpage.
 

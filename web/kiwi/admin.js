@@ -13,25 +13,24 @@ function status_html()
 {
    var s2 = admin_sdr_mode?
 		('<hr>' +
-		w3_divs('id-msg-errors w3-container') + 
-		w3_divs('id-status-dpump-resets w3-container') + 
-		w3_divs('w3-container', '',
+		w3_div('id-msg-errors w3-container') + 
+		w3_div('w3-container w3-section w3-valign',
 		   w3_div('id-status-dpump-hist w3-show-inline-block') +
          w3_button('w3-aqua|margin-left:10px', 'Reset', 'status_dpump_hist_reset_cb')
       )) : '';
    
 	var s =
-	w3_divs('id-status w3-hide', '',
+	w3_div('id-status w3-hide',
 		'<hr>' +
-		w3_divs('id-problems w3-container') +
-		w3_divs('id-msg-config w3-container') +
-		w3_divs('id-msg-gps w3-container') +
+		w3_div('id-problems w3-container') +
+		w3_div('id-msg-config w3-container') +
+		w3_div('id-msg-gps w3-container') +
 		'<hr>' +
-		w3_divs('id-msg-stats-cpu w3-container') +
-		w3_divs('id-msg-stats-xfer w3-container') +
+		w3_div('id-msg-stats-cpu w3-container') +
+		w3_div('id-msg-stats-xfer w3-container') +
 		s2 +
       '<hr>' +
-		w3_divs('id-debugdiv w3-container')
+		w3_div('id-debugdiv w3-container')
 	);
 	return s;
 }
@@ -49,6 +48,112 @@ function status_user_kick_cb(id, idx)
 
 
 ////////////////////////////////
+// mode
+////////////////////////////////
+
+var firmware_sel = { RX_4_WF_4:0, RX_8_WF_2:1 };
+var mode_icon_snd = w3_icon('w3-text-blue', 'fa-volume-up', 28) +'&nbsp;';
+var mode_icon_fft = w3_icon('w3-text-green', 'fa-bar-chart', 28) +'&nbsp;';
+var mode_icon_wf = w3_icon('w3-text-red', 'fa-area-chart', 28) +'&nbsp;';
+
+function mode_html()
+{
+   var bw = 230, bwpx = px(bw);
+   var bh = 72.5, bhpx = px(bh);
+   var ci = 0;
+	var s =
+	w3_div('id-mode w3-hide',
+		'<hr>',
+		w3_div('w3-container',
+         w3_div('w3-flex w3-margin-B-8',
+            w3_div('w3-text-teal|width:'+ bhpx, ' '),
+            w3_div('w3-text-teal w3-center w3-bold|width:'+ bwpx, 'select FPGA mode'),
+            w3_div('id-fw-hdr w3-flex w3-margin-left')
+         ),
+         
+         w3_div('',
+            w3_div('w3-left',
+               w3_div('w3-flex', '<img src="gfx/kiwi.73x73.jpg" width="73" height="73" />'),
+               w3_div('w3-flex', '<img src="gfx/cowbelly.73x73.jpg" width="73" height="73" />')
+            ),
+            w3_sidenav('id-fw-nav|width:'+ bwpx +';border-collapse:collapse',
+               w3_nav(admin_colors[ci++] +' w3-border w3-padding-xxlarge w3-restart', 'Kiwi classic', firmware_sel.RX_4_WF_4, 'firmware_sel_cb', (adm.firmware_sel == firmware_sel.RX_4_WF_4)),
+               w3_nav(admin_colors[ci++] +' w3-border w3-padding-xxlarge w3-restart', 'More receivers', firmware_sel.RX_8_WF_2, 'firmware_sel_cb', (adm.firmware_sel == firmware_sel.RX_8_WF_2))
+            ),
+            w3_div('w3-margin-left w3-left',
+               w3_div('id-fw-44 w3-flex w3-padding-TB-7'),
+               w3_div('id-fw-82 w3-flex w3-padding-TB-7')
+            )
+         ),
+         
+		   w3_div('w3-clear', ' '),      // don't quite understand why this is needed, but it is
+		   w3_div('w3-margin-T-16', '<hr>'),
+
+         w3_col_percent('w3-section/ w3-hspace-16',
+            w3_div('w3-text-black',
+               w3_text('w3-bold w3-text-teal', 'Trading waterfalls for more receiver channels'),
+
+               w3_div('w3-flex', w3_div('|width:40px', mode_icon_snd), 'Audio output, 12 kHz max bandwidth'),
+               w3_div('w3-flex', w3_div('|width:40px', mode_icon_fft), 'Audio FFT, 12 kHz max bandwidth '),
+               w3_div('w3-flex w3-margin-B-8', w3_div('|width:40px', mode_icon_wf), 'Tuneable waterfall/spectrum, 30 MHz bandwidth, 14-level zoom'),
+
+               'The original Kiwi FPGA with its 4 tuneable audio/waterfall receiver channels and 12 GPS channels was completely full. ' +
+               'But it is now possible to load a different FPGA configuration where 2 of the waterfalls have been traded for ' +
+               'adding more audio-only receiver channels. '
+            ), 48,
+   
+            w3_div('w3-text-black', ' '), 4,
+   
+            w3_div('w3-text-black',
+               'Having more receiver channels per Kiwi is especially important with the recently added features that are channel intensive. ' +
+               'Namely the TDoA service, WSPR autorun and external connection via the kiwirecorder program for using other software such ' +
+               'as WSJT-X and Dream (DRM). When these kinds of connections are made channels rx2 - rx7 will be used first ' +
+               'leaving rx0 and rx1 available for normal browser connections where it is desirable to view the waterfall. ' +
+               'However rx0 and rx1 will be used last if necessary. The configurable TDoA channel limit still applies.<br><br>' +
+
+               'To compensate for lack of the waterfall/spectrum on the new channels an audio-bandwidth FFT is presented instead. ' +
+               'This requires no additional FPGA resources.'
+            ), 48
+         )
+      )
+	);
+	return s;
+}
+
+function mode_focus()
+{
+   console.log('mode_focus');
+   var i, s;
+   var iwpx = px(90);
+   
+   s = '';
+   for (i = 0; i < 8; i++) s += w3_div('w3-margin-left w3-bold w3-center|width:'+ iwpx, 'rx'+ i);
+   w3_innerHTML('id-fw-hdr', s);
+
+   var rxwf = w3_div('w3-margin-left w3-border w3-border-light-blue w3-center|width:'+ iwpx, mode_icon_snd, mode_icon_fft, '<br>', mode_icon_wf);
+   
+   var rx = w3_div('w3-margin-left w3-border w3-border-light-blue w3-center|width:'+ iwpx, mode_icon_snd, mode_icon_fft);
+   
+   s = '';
+   for (i = 0; i < 4; i++) s += rxwf;
+   //for (i = 4; i < 8; i++) s += w3_div('w3-margin-left|width:50px', '&nbsp;');
+   w3_innerHTML('id-fw-44', s);
+
+   s = '';
+   for (i = 0; i < 2; i++) s += rxwf;
+   for (i = 2; i < 8; i++) s += rx;
+   w3_innerHTML('id-fw-82', s);
+}
+
+function firmware_sel_cb_focus(path)
+{
+   var firmware_sel = +path;
+   console.log('firmware_sel_cb_focus path='+ path);
+	ext_set_cfg_param('adm.firmware_sel', firmware_sel, true);
+}
+
+
+////////////////////////////////
 // control
 ////////////////////////////////
 
@@ -56,21 +161,21 @@ function control_html()
 {
 	var s1 =
 		'<hr>' +
-		w3_half('w3-vcenter', '',
+		w3_half('w3-valign', '',
          w3_div('',
             w3_div('',
                w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'admin_restart_cb'),
                w3_button('w3-blue w3-margin', 'Beagle reboot', 'admin_reboot_cb'),
                w3_button('w3-red w3-margin', 'Beagle power off', 'admin_power_off_cb')
             ),
-            w3_divs('id-confirm w3-vcenter w3-hide', '',
+            w3_div('id-confirm w3-valign w3-hide',
                w3_button('w3-css-yellow w3-margin', 'Confirm', 'admin_confirm_cb')
             )
          ),
 			w3_div('w3-container w3-center',
             '<b>Daily restart?</b> ' +
             w3_switch('', 'Yes', 'No', 'adm.daily_restart', adm.daily_restart, 'admin_radio_YN_cb'),
-				w3_divs('', 'w3-text-black',
+				w3_div('w3-text-black',
 					"Set if you're having problems with the server<br>after it has run for a period of time.<br>" +
 					"Restart occurs at the same time as updates (0200-0600 UTC)<br> and will wait until there are no connections."
 				)
@@ -79,42 +184,50 @@ function control_html()
 
 	var s2 =
 		'<hr>' +
-		w3_half('', 'w3-container w3-vcenter',
-			w3_div('',
-            '<b>Enable user connections?</b> ' +
+		w3_third('', 'w3-container w3-valign',
+			w3_divs('w3-center w3-tspace-8',
+				w3_div('', '<b>Enable user connections?</b>'),
             w3_switch('', 'Yes', 'No', 'adm.server_enabled', adm.server_enabled, 'server_enabled_cb')
 			),
-			w3_div('',
-				'<b>Close all active user connections </b> ' +
+			w3_divs('w3-center w3-tspace-8',
+				w3_div('', '<b>Close all active user connections</b>'),
 				w3_button('w3-red', 'Kick', 'control_user_kick_cb')
+			),
+			w3_divs('w3-restart/w3-center w3-tspace-8',
+				w3_div('', '<b>Disable waterfalls/spectrum?</b>'),
+            w3_switch('', 'Yes', 'No', 'cfg.no_wf', cfg.no_wf, 'admin_radio_YN_cb'),
+				w3_text('w3-text-black w3-center',
+				   'Set "yes" to save Internet bandwidth by preventing <br>' +
+				   'the waterfall and spectrum from being displayed.'
+				)
 			)
 		) +
-		w3_divs('w3-container w3-margin-top', '',
+		w3_div('w3-container w3-margin-top',
 			w3_input_get('', 'Reason if disabled', 'reason_disabled', 'reason_disabled_cb', '', 'will be shown to users attempting to connect')
 		) +
-		w3_divs('w3-margin-top', 'w3-container',
+		w3_divs('w3-margin-top/w3-container',
 			'<label><b>Reason HTML preview</b></label>',
-			w3_divs('', 'id-reason-disabled-preview w3-text-black w3-background-pale-aqua', '')
+			w3_div('id-reason-disabled-preview w3-text-black w3-background-pale-aqua', '')
 		);
 	
 	var s3 =
 		'<hr>' +
 		w3_third('w3-margin-bottom w3-text-teal', 'w3-container',
-			w3_divs('w3-restart', '',
-				w3_input_get('', 'Inactivity time limit (min, 0 = no limit)', 'inactivity_timeout_mins', 'admin_int_zero_cb'),
-				w3_divs('', 'w3-text-black', 'Connections from the local network are exempt.')
+			w3_div('w3-restart',
+				w3_input_get('', 'Inactivity time limit (min, 0 = no limit)', 'inactivity_timeout_mins', 'admin_int_cb'),
+				w3_div('w3-text-black', 'Connections from the local network are exempt.')
 			),
-			w3_divs('w3-restart', '',
-				w3_input_get('', '24hr per-IP addr time limit (min, 0 = no limit)', 'ip_limit_mins', 'admin_int_zero_cb'),
-				w3_divs('', 'w3-text-black', 'Connections from the local network are exempt.')
+			w3_div('w3-restart',
+				w3_input_get('', '24hr per-IP addr time limit (min, 0 = no limit)', 'ip_limit_mins', 'admin_int_cb'),
+				w3_div('w3-text-black', 'Connections from the local network are exempt.')
 			),
-			w3_divs('', '',
+			w3_div('',
 				w3_input_get('', 'Time limit exemption password', 'tlimit_exempt_pwd', 'w3_string_set_cfg_cb'),
-				w3_divs('', 'w3-text-black', 'Password users can give to override time limits.')
+				w3_div('w3-text-black', 'Password users can give to override time limits.')
 			)
 		);
 
-   return w3_divs('id-control w3-text-teal w3-hide', '', s1 + (admin_sdr_mode? (s2 + s3) : ''));
+   return w3_div('id-control w3-text-teal w3-hide', s1 + (admin_sdr_mode? (s2 + s3) : ''));
 }
 
 function control_focus()
@@ -173,7 +286,7 @@ function connect_html()
 
    var ci = 0;
    var s1 =
-		w3_div('w3-vcenter',
+		w3_div('w3-valign',
 			'<header class="w3-container w3-yellow"><h5>' +
 			'If you are not able to make an incoming connection from the Internet to your Kiwi because ' +
 			'of problems <br> with your router or Internet Service Provider (ISP) then please consider using the KiwiSDR ' +
@@ -182,14 +295,14 @@ function connect_html()
 		) +
 		
       '<hr>' +
-		w3_divs('id-warn-ip w3-vcenter w3-margin-B-8 w3-hide', '', '<header class="w3-container w3-yellow"><h5>' +
+		w3_div('id-warn-ip w3-valign w3-margin-B-8 w3-hide', '<header class="w3-container w3-yellow"><h5>' +
 			'Warning: Using an IP address in the Kiwi connect name will work, but if you switch to using a domain name later on<br>' +
-			'this will cause duplicate entries on <a href="http://sdr.hu/?top=kiwi" target="_blank">sdr.hu</a> ' +
+			'this will cause duplicate entries on <a href="https://sdr.hu/?top=kiwi" target="_blank">sdr.hu</a> ' +
 			'See <a href="http://kiwisdr.com/quickstart#id-sdr_hu-dup" target="_blank">kiwisdr.com/quickstart</a> for more information.' +
 			'</h5></header>'
 		) +
 		
-      w3_divs('w3-container', 'w3-tspace-8',
+      w3_divs('w3-container/w3-tspace-8',
          w3_label('', 'What domain name or IP address will people use to connect to your KiwiSDR?<br>' +
             'If you are listing on sdr.hu this information will be part of your entry.<br>' +
             'Click one of the five options below and enter any additional information:<br><br>'),
@@ -197,15 +310,15 @@ function connect_html()
          // (n/a anymore) w3-static because w3-sidenav does a position:fixed which is no good here at the bottom of the page
          // w3-left to get float:left to put the input fields on the right side
          // w3-sidenav-full-height to match the height of the w3_input() on the right side
-		   '<nav class="id-admin-nav-dom w3-sidenav w3-static w3-left w3-border w3-sidenav-full-height w3-margin-R-16 w3-light-grey">' +
-		      w3_nav(admin_colors[ci++], 'Domain Name', 'connect_dom_nam', 'connect_dom_nam', (cfg.sdr_hu_dom_sel == connect_dom_sel.NAM)) +
-		      w3_nav(admin_colors[ci++], 'DUC Domain', 'connect_dom_duc', 'connect_dom_duc', (cfg.sdr_hu_dom_sel == connect_dom_sel.DUC)) +
-		      w3_nav(admin_colors[ci++], 'Reverse Proxy', 'connect_dom_rev', 'connect_dom_rev', (cfg.sdr_hu_dom_sel == connect_dom_sel.REV)) +
-		      w3_nav(admin_colors[ci++], 'Public IP', 'connect_dom_pub', 'connect_dom_pub', (cfg.sdr_hu_dom_sel == connect_dom_sel.PUB)) +
-		      w3_nav(admin_colors[ci++], 'Specified IP', 'connect_dom_sip', 'connect_dom_sip', (cfg.sdr_hu_dom_sel == connect_dom_sel.SIP)) +
-		   '</nav>',
+		   w3_sidenav('id-admin-nav-dom w3-margin-R-16',
+		      w3_nav(admin_colors[ci++] +' w3-border', 'Domain Name', 'connect_dom_nam', 'connect_dom_nam', (cfg.sdr_hu_dom_sel == connect_dom_sel.NAM)),
+		      w3_nav(admin_colors[ci++] +' w3-border', 'DUC Domain', 'connect_dom_duc', 'connect_dom_duc', (cfg.sdr_hu_dom_sel == connect_dom_sel.DUC)),
+		      w3_nav(admin_colors[ci++] +' w3-border', 'Reverse Proxy', 'connect_dom_rev', 'connect_dom_rev', (cfg.sdr_hu_dom_sel == connect_dom_sel.REV)),
+		      w3_nav(admin_colors[ci++] +' w3-border', 'Public IP', 'connect_dom_pub', 'connect_dom_pub', (cfg.sdr_hu_dom_sel == connect_dom_sel.PUB)),
+		      w3_nav(admin_colors[ci++] +' w3-border', 'Specified IP', 'connect_dom_sip', 'connect_dom_sip', (cfg.sdr_hu_dom_sel == connect_dom_sel.SIP))
+		   ),
 		   
-		   w3_divs('', 'w3-padding-L-16',
+		   w3_div('w3-padding-L-16',
             w3_div('w3-show-inline-block|width:70%;', w3_input_get('', '', 'sdr_hu_dom_name', 'connect_dom_name_cb', '',
                'Enter domain name that you will point to Kiwi public IP address, e.g. kiwisdr.my_domain.com (don\'t include port number)')),
             w3_div('id-connect-duc-dom w3-padding-TB-8'),
@@ -240,39 +353,37 @@ function connect_html()
    var s3 =
 		'<hr>' +
 		w3_div('',
-         w3_div('w3-container w3-vcenter',
+         w3_div('w3-container w3-valign',
             '<header class="w3-container w3-yellow"><h6>' +
             'Please read these instructions before use: ' +
             '<a href="http://kiwisdr.com/quickstart/index.html#id-net-duc" target="_blank">dynamic DNS update client (DUC)</a>' +
             '</h6></header>'
          ),
 
-			w3_col_percent('w3-text-teal', 'w3-container',
+			w3_col_percent('w3-text-teal/w3-container',
 			   w3_div('w3-text-teal w3-bold', 'Dynamic DNS update client (DUC) configuration'), 50,
 				w3_div('w3-text-teal w3-bold w3-center w3-light-grey', 'Account at noip.com'), 50
 			),
 			
-			w3_col_percent('w3-text-teal', 'w3-container',
+			w3_col_percent('w3-text-teal/w3-container',
 				w3_div(), 50,
 				w3_input_get('', 'Username or email', 'adm.duc_user', 'w3_string_set_cfg_cb', '', 'required'), 25,
 				w3_input_get('', 'Password', 'adm.duc_pass', 'w3_string_set_cfg_cb', '', 'required'), 25
 			),
 			
-			w3_col_percent('w3-text-teal', 'w3-container',
+			w3_col_percent('w3-text-teal/w3-container',
 				w3_div('w3-center',
 					'<b>Enable DUC at startup?</b><br>' +
-					w3_divs('', '',
-						w3_switch('', 'Yes', 'No', 'adm.duc_enable', adm.duc_enable, 'connect_DUC_enabled_cb')
-					)
+					w3_switch('w3-margin-T-8', 'Yes', 'No', 'adm.duc_enable', adm.duc_enable, 'connect_DUC_enabled_cb')
 				), 20,
 				
 				w3_div('w3-center',
 				   w3_select('', 'Update', '', 'adm.duc_update', adm.duc_update, duc_update_i, 'admin_select_cb')
 				), 10,
 				
-				w3_divs('', 'w3-center w3-tspace-8',
+				w3_div('w3-center w3-tspace-8',
 					w3_button('w3-aqua', 'Click to (re)start DUC', 'connect_DUC_start_cb'),
-					w3_divs('', 'w3-text-black',
+					w3_div('w3-text-black',
 						'After changing username or password click to test changes.'
 					)
 				), 20,
@@ -289,33 +400,39 @@ function connect_html()
    var s4 =
 		'<hr>' +
 		w3_div('',
-         w3_div('w3-container w3-vcenter',
+         w3_div('w3-container w3-valign',
             '<header class="w3-container w3-yellow"><h6>' +
             'Please read these instructions before use: ' +
             '<a href="http://proxy.kiwisdr.com" target="_blank">reverse proxy service</a>' +
             '</h6></header>'
          ),
 
-			w3_col_percent('w3-text-teal', 'w3-container',
+			w3_col_percent('w3-text-teal/w3-container',
 			   w3_div('w3-text-teal w3-bold', 'Reverse proxy configuration'), 50,
-				w3_div('w3-text-teal w3-bold w3-center w3-light-grey', 'Account at kiwisdr.com'), 50
+				w3_div('w3-text-teal w3-bold w3-center w3-light-grey', 'Proxy information for kiwisdr.com'), 50
 			),
 			
-			w3_col_percent('w3-text-teal', 'w3-container',
+			w3_col_percent('w3-text-teal/w3-container',
 				w3_div(), 50,
-				w3_input_get('', 'User key', 'adm.rev_user', 'w3_string_set_cfg_cb', '', 'required'), 50
+				w3_input_get('', 'User key (same as sdr.hu API key, see instructions)',
+				   'adm.rev_user', 'w3_string_set_cfg_cb', '', 'required'
+				), 50
 			),
 			
-			w3_col_percent('w3-text-teal', 'w3-container',
-				w3_divs('', 'w3-center w3-tspace-8',
+			w3_col_percent('w3-text-teal/w3-container',
+				w3_div('w3-center w3-tspace-8',
 					w3_button('w3-aqua', 'Click to (re)register', 'connect_rev_register_cb'),
-					w3_divs('', 'w3-text-black',
+					w3_div('w3-text-black',
 						'After changing user key or<br>host name click to register proxy.'
 					)
 				), 50,
 				
 				w3_div('',
-               w3_div('w3-show-inline-block|width:40%;', w3_input_get('', 'Host name', 'adm.rev_host', 'connect_rev_host_cb', '', 'required')) +
+               w3_div('w3-show-inline-block|width:60%;',
+                  w3_input_get('', 'Host name (your choice, see instructions)',
+                     'adm.rev_host', 'connect_rev_host_cb', '', 'required'
+                  )
+               ) +
                w3_div('id-connect-rev-url w3-show-inline-block', '.proxy.kiwisdr.com')
             ), 50
 			),
@@ -327,7 +444,7 @@ function connect_html()
 		) +
 		'<hr>';
 
-	return w3_divs('id-connect w3-text-teal w3-hide', '', s1 + s2 + s3 + s4);
+	return w3_div('id-connect w3-text-teal w3-hide', s1 + s2 + s3 + s4);
 }
 
 function connect_focus()
@@ -496,8 +613,8 @@ function connect_DUC_enabled_cb(path, idx, first)
 function connect_DUC_start_cb(id, idx)
 {
 	// decode stored json values because we recode below to encode spaces of composite string
-	var s = '-u '+ q(decodeURIComponent(adm.duc_user)) +' -p '+ q(decodeURIComponent(adm.duc_pass)) +
-	   ' -H '+ q(decodeURIComponent(adm.duc_host)) +' -U '+ duc_update_v[adm.duc_update];
+	var s = '-u '+ sq(decodeURIComponent(adm.duc_user)) +' -p '+ sq(decodeURIComponent(adm.duc_pass)) +
+	   ' -H '+ sq(decodeURIComponent(adm.duc_host)) +' -U '+ duc_update_v[adm.duc_update];
 	console.log('start DUC: '+ s);
 	ext_send('SET DUC_start args='+ encodeURIComponent(s));
 }
@@ -585,57 +702,221 @@ function connect_rev_status_cb(status)
 
 
 ////////////////////////////////
+// all in admin_sdr.js
+// config
+// webpage
+// sdr.hu
+// dx
+////////////////////////////////
+
+
+////////////////////////////////
+// update
+//		auto reload page when build finished?
+////////////////////////////////
+
+function update_html()
+{
+	var s =
+	w3_div('id-update w3-hide',
+		'<hr>' +
+		w3_div('id-msg-update w3-container') +
+		'<hr>' +
+		w3_div('w3-margin-bottom',
+         w3_half('w3-container', 'w3-text-teal',
+				w3_div('',
+                  '<b>Automatically check for software updates?</b> ' +
+                  w3_switch('', 'Yes', 'No', 'adm.update_check', adm.update_check, 'admin_radio_YN_cb')
+            ),
+				w3_div('',
+                  '<b>Automatically install software updates?</b> ' +
+                  w3_switch('', 'Yes', 'No', 'adm.update_install', adm.update_install, 'admin_radio_YN_cb')
+            )
+         ),
+         w3_half('w3-container', 'w3-text-teal',
+            w3_div('',
+               w3_select('w3-label-inline', 'After update', '', 'adm.update_restart', adm.update_restart, update_restart_u, 'admin_select_cb')
+            ),
+            ''
+         )
+		) +
+		'<hr>' +
+		w3_half('w3-container', 'w3-text-teal',
+			w3_div('w3-valign',
+				'<b>Check for software update </b> ' +
+				w3_button('w3-aqua w3-margin', 'Check now', 'update_check_now_cb')
+			),
+			w3_div('w3-valign',
+				'<b>Force software build </b> ' +
+				w3_button('w3-aqua w3-margin', 'Build now', 'update_build_now_cb')
+			)
+		) +
+		'<hr>' +
+		w3_div('w3-container', 'TODO: alt github name') +
+		'<hr>'
+	);
+	return s;
+}
+
+var update_restart_u = { 0: 'restart server', 1: 'reboot Beagle' };
+
+function update_check_now_cb(id, idx)
+{
+	ext_send('SET force_check=1 force_build=0');
+	w3_el('msg-update').innerHTML = w3_icon('', 'fa-refresh fa-spin', 20);
+}
+
+function update_build_now_cb(id, idx)
+{
+	ext_send('SET force_check=1 force_build=1');
+	if (adm.update_restart == 0)
+	   w3_show_block('id-build-restart');
+	else
+	   w3_show_block('id-build-reboot');
+}
+
+
+////////////////////////////////
+// backup
+////////////////////////////////
+
+function backup_html()
+{
+	var s =
+	w3_div('id-backup w3-hide',
+		'<hr>',
+		w3_div('w3-section w3-text-teal w3-bold', 'Backup complete contents of KiwiSDR by writing Beagle filesystem onto a user provided micro-SD card'),
+		w3_div('w3-container w3-text w3-red', 'WARNING: after SD card is written immediately remove from Beagle.<br>Otherwise on next reboot Beagle will be re-flashed from SD card.'),
+		'<hr>',
+		w3_third('w3-container', 'w3-valign',
+			w3_button('w3-aqua w3-margin', 'Click to write micro-SD card', 'backup_sd_write'),
+
+			w3_div('',
+				w3_div('id-progress-container w3-progress-container w3-round-large w3-gray w3-show-inline-block',
+					w3_div('id-progress w3-progressbar w3-round-large w3-light-green w3-width-zero',
+						w3_div('id-progress-text w3-container')
+					)
+				),
+				
+            w3_div('w3-margin-T-8',
+               w3_div('id-progress-time w3-show-inline-block') +
+               w3_div('id-progress-icon w3-show-inline-block w3-margin-left')
+            )
+			),
+
+			w3_div('id-sd-status class-sd-status')
+		),
+		'<hr>',
+		'<div id="id-output-msg" class="w3-container w3-text-output w3-scroll-down w3-small w3-margin-B-16"></div>'
+	);
+	return s;
+}
+
+function backup_focus()
+{
+	w3_el('id-progress-container').style.width = px(300);
+	w3_el('id-output-msg').style.height = px(300);
+}
+
+var sd_progress, sd_progress_max = 4*60;		// measured estimate -- in secs (varies with SD card write speed)
+var backup_sd_interval;
+var backup_refresh_icon = w3_icon('', 'fa-refresh fa-spin', 20);
+
+function backup_sd_write(id, idx)
+{
+	var el = w3_el('id-sd-status');
+	el.innerHTML = "writing the micro-SD card...";
+
+	w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '0%';
+
+	sd_progress = -1;
+	backup_sd_progress();
+	backup_sd_interval = setInterval(backup_sd_progress, 1000);
+
+	w3_el('id-progress-icon').innerHTML = backup_refresh_icon;
+
+	ext_send("SET microSD_write");
+}
+
+function backup_sd_progress()
+{
+	sd_progress++;
+	var pct = ((sd_progress / sd_progress_max) * 100).toFixed(0);
+	if (pct <= 95) {	// stall updates until we actually finish in case SD is writing slowly
+		w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = pct +'%';
+	}
+	w3_el('id-progress-time').innerHTML =
+		((sd_progress / 60) % 60).toFixed(0) +':'+ (sd_progress % 60).toFixed(0).leadingZeros(2);
+}
+
+function backup_sd_write_done(err)
+{
+	var el = w3_el('id-sd-status');
+	var msg = err? ('FAILED error '+ err.toString()) : 'WORKED';
+	if (err == 1) msg += '<br>No SD card inserted?';
+	if (err == 15) msg += '<br>rsync I/O error';
+	el.innerHTML = msg;
+	el.style.color = err? 'red':'lime';
+
+	if (!err) {
+		// force to max in case we never made it during updates
+		w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '100%';
+	}
+	kiwi_clearInterval(backup_sd_interval);
+	w3_el('id-progress-icon').innerHTML = '';
+}
+
+
+////////////////////////////////
 // network
 ////////////////////////////////
 
 function network_html()
 {
 	var s1 =
-		w3_divs('id-net-auto-nat w3-vcenter w3-hide', '',
+		w3_div('id-net-auto-nat w3-valign w3-hide',
 			'<header class="w3-container"><h5 id="id-net-auto-nat-msg">Automatic add of NAT rule on firewall / router: </h5></header>'
 		) +
 
-		w3_divs('id-net-need-update w3-vcenter w3-margin-T-8 w3-hide', '',
+		w3_div('id-net-need-update w3-valign w3-margin-T-8 w3-hide',
 			w3_button('w3-aqua', 'Are you sure? Click to update interface DHCP/static IP configuration', 'network_dhcp_static_update_cb')
 		) +
 
 		'<hr>' +
-		w3_divs('id-net-reboot', '',
-			w3_col_percent('w3-container w3-margin-bottom w3-text-teal', 'w3-hspace-16',
-				w3_divs('', 'w3-restart',
-					w3_input_get('', 'Internal port', 'adm.port', 'admin_int_null_cb')
+		w3_div('id-net-reboot',
+			w3_col_percent('w3-container w3-margin-bottom w3-text-teal/w3-hspace-16',
+				w3_div('w3-restart',
+					w3_input_get('', 'Internal port', 'adm.port', 'admin_int_cb')
 				), 24,
-				w3_divs('', 'w3-restart',
-					w3_input_get('', 'External port', 'adm.port_ext', 'admin_int_null_cb')
+				w3_div('w3-restart',
+					w3_input_get('', 'External port', 'adm.port_ext', 'admin_int_cb')
 				), 24,
-				w3_divs('w3-center', 'w3-restart',
+				w3_divs('w3-center/w3-restart',
 					'<b>Auto add NAT rule<br>on firewall / router?</b><br>',
-					w3_divs('', '',
-						w3_switch('', 'Yes', 'No', 'adm.auto_add_nat', adm.auto_add_nat, 'admin_radio_YN_cb')
-					)
+					w3_switch('w3-margin-T-8', 'Yes', 'No', 'adm.auto_add_nat', adm.auto_add_nat, 'admin_radio_YN_cb')
 				), 24,
-				w3_divs('w3-center', '',
+				w3_div('w3-center',
 						'<b>IP address<br>(only static IPv4 for now)</b><br> ' +
-						w3_radio_button_get_param('', 'DHCP', 'adm.ip_address.use_static', 0, false, 'network_use_static_cb') +
-						w3_radio_button_get_param('', 'Static', 'adm.ip_address.use_static', 1, false, 'network_use_static_cb')
+						w3_radio_button_get_param('w3-margin-T-8', 'DHCP', 'adm.ip_address.use_static', 0, false, 'network_use_static_cb') +
+						w3_radio_button_get_param('w3-margin-T-8', 'Static', 'adm.ip_address.use_static', 1, false, 'network_use_static_cb')
 				), 24
 			),
-			w3_divs('id-net-static w3-hide', '',
+			w3_div('id-net-static w3-hide',
 				w3_third('w3-margin-B-8 w3-text-teal', 'w3-container',
 					w3_input_get('', 'IP address (n.n.n.n where n = 0..255)', 'adm.ip_address.ip', 'network_ip_address_cb', ''),
 					w3_input_get('', 'Netmask (n.n.n.n where n = 0..255)', 'adm.ip_address.netmask', 'network_netmask_cb', ''),
 					w3_input_get('', 'Gateway (n.n.n.n where n = 0..255)', 'adm.ip_address.gateway', 'network_gw_address_cb', '')
 				),
 				w3_third('w3-margin-B-8 w3-text-teal', 'w3-container',
-					w3_divs('id-network-check-ip w3-green', ''),
-					w3_divs('id-network-check-nm w3-green', ''),
-					w3_divs('id-network-check-gw w3-green', '')
+					w3_div('id-network-check-ip w3-green'),
+					w3_div('id-network-check-nm w3-green'),
+					w3_div('id-network-check-gw w3-green')
 				),
-				w3_third('w3-vcenter w3-margin-bottom w3-text-teal', 'w3-container',
+				w3_third('w3-valign w3-margin-bottom w3-text-teal', 'w3-container',
 					w3_input_get('', 'DNS-1 (n.n.n.n where n = 0..255)', 'adm.ip_address.dns1', 'w3_string_set_cfg_cb', ''),
 					w3_input_get('', 'DNS-2 (n.n.n.n where n = 0..255)', 'adm.ip_address.dns2', 'w3_string_set_cfg_cb', ''),
 					w3_div('',
-                  w3_label('', '<br>') +     // makes the w3-vcenter above work for button below
+                  w3_label('', '<br>') +     // makes the w3-valign above work for button below
                   w3_button('w3-show-inline w3-aqua', 'Use Google public DNS', 'net_google_dns_cb')
                )
 				)
@@ -644,10 +925,10 @@ function network_html()
 	
 	var s2 =
 		'<hr>' +
-		w3_divs('id-net-config w3-container', '') +
+		w3_div('id-net-config w3-container') +
 
 		'<hr>' +
-		w3_divs('', 'w3-container',
+		w3_div('w3-container',
 		   w3_div('', 
             w3_label('w3-show-inline w3-text-teal', 'Check if your external router port is open:') +
             w3_button('w3-show-inline w3-aqua|margin-left:10px', 'Check port open', 'net_port_open_cb')
@@ -668,7 +949,7 @@ function network_html()
 
    var s3 =
 		'<hr>' +
-		w3_divs('w3-container', '', 'TODO: throttle #chan MB/dy GB/mo, hostname') +
+		w3_div('w3-container', 'TODO: throttle #chan MB/dy GB/mo, hostname') +
 		'<hr>';
 
 	// FIXME replace this with general instantiation call from w3_input()
@@ -677,7 +958,7 @@ function network_html()
 		network_use_static_cb('adm.ip_address.use_static', use_static, /* first */ true);
 	}, 500);
 	
-	return w3_divs('id-network w3-hide', '', s1 + s2 + s3);
+	return w3_div('id-network w3-hide', s1 + s2 + s3);
 }
 
 function network_focus()
@@ -873,163 +1154,6 @@ function net_google_dns_cb(id, idx)
 
 
 ////////////////////////////////
-// update
-//		auto reload page when build finished?
-////////////////////////////////
-
-function update_html()
-{
-	var s =
-	w3_divs('id-update w3-hide', '',
-		'<hr>' +
-		w3_divs('id-msg-update w3-container', '') +
-		'<hr>' +
-		w3_divs('', 'w3-margin-bottom',
-         w3_half('w3-container', 'w3-text-teal',
-				w3_div('',
-                  '<b>Automatically check for software updates?</b> ' +
-                  w3_switch('', 'Yes', 'No', 'adm.update_check', adm.update_check, 'admin_radio_YN_cb')
-            ),
-				w3_div('',
-                  '<b>Automatically install software updates?</b> ' +
-                  w3_switch('', 'Yes', 'No', 'adm.update_install', adm.update_install, 'admin_radio_YN_cb')
-            )
-         ),
-         w3_half('w3-container', 'w3-text-teal',
-            w3_div('',
-               w3_select('w3-label-inline', 'After update', '', 'adm.update_restart', adm.update_restart, update_restart_u, 'admin_select_cb')
-            ),
-            ''
-         )
-		) +
-		'<hr>' +
-		w3_half('w3-container', 'w3-text-teal',
-			w3_divs('w3-vcenter', '',
-				'<b>Check for software update </b> ' +
-				w3_button('w3-aqua w3-margin', 'Check now', 'update_check_now_cb')
-			),
-			w3_divs('w3-vcenter', '',
-				'<b>Force software build </b> ' +
-				w3_button('w3-aqua w3-margin', 'Build now', 'update_build_now_cb')
-			)
-		) +
-		'<hr>' +
-		w3_divs('w3-container', '', 'TODO: alt github name') +
-		'<hr>'
-	);
-	return s;
-}
-
-var update_restart_u = { 0: 'restart server', 1: 'reboot Beagle' };
-
-function update_check_now_cb(id, idx)
-{
-	ext_send('SET force_check=1 force_build=0');
-	w3_el('msg-update').innerHTML = w3_icon('', 'fa-refresh fa-spin', 20);
-}
-
-function update_build_now_cb(id, idx)
-{
-	ext_send('SET force_check=1 force_build=1');
-	if (adm.update_restart == 0)
-	   w3_show_block('id-build-restart');
-	else
-	   w3_show_block('id-build-reboot');
-}
-
-
-////////////////////////////////
-// backup
-////////////////////////////////
-
-function backup_html()
-{
-	var s =
-	w3_divs('id-backup w3-hide', '',
-		'<hr>',
-		w3_div('w3-section w3-text-teal w3-bold', 'Backup complete contents of KiwiSDR by writing Beagle filesystem onto a user provided micro-SD card'),
-		w3_div('w3-container w3-text w3-red', 'WARNING: after SD card is written immediately remove from Beagle.<br>Otherwise on next reboot Beagle will be re-flashed from SD card.'),
-		'<hr>',
-		w3_third('w3-container', 'w3-vcenter',
-			w3_button('w3-aqua w3-margin', 'Click to write micro-SD card', 'backup_sd_write'),
-
-			w3_div('',
-				w3_div('id-progress-container w3-progress-container w3-round-large w3-gray w3-show-inline-block',
-					w3_div('id-progress w3-progressbar w3-round-large w3-light-green w3-width-zero',
-						w3_div('id-progress-text w3-container')
-					)
-				),
-				
-            w3_div('w3-margin-T-8',
-               w3_div('id-progress-time w3-show-inline-block') +
-               w3_div('id-progress-icon w3-show-inline-block w3-margin-left')
-            )
-			),
-
-			w3_div('id-sd-status class-sd-status')
-		),
-		'<hr>',
-		'<div id="id-output-msg" class="w3-container w3-text-output w3-scroll-down w3-small w3-margin-B-16"></div>'
-	);
-	return s;
-}
-
-function backup_focus()
-{
-	w3_el('id-progress-container').style.width = px(300);
-	w3_el('id-output-msg').style.height = px(300);
-}
-
-var sd_progress, sd_progress_max = 4*60;		// measured estimate -- in secs (varies with SD card write speed)
-var backup_sd_interval;
-var backup_refresh_icon = w3_icon('', 'fa-refresh fa-spin', 20);
-
-function backup_sd_write(id, idx)
-{
-	var el = w3_el('id-sd-status');
-	el.innerHTML = "writing the micro-SD card...";
-
-	w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '0%';
-
-	sd_progress = -1;
-	backup_sd_progress();
-	backup_sd_interval = setInterval(backup_sd_progress, 1000);
-
-	w3_el('id-progress-icon').innerHTML = backup_refresh_icon;
-
-	ext_send("SET microSD_write");
-}
-
-function backup_sd_progress()
-{
-	sd_progress++;
-	var pct = ((sd_progress / sd_progress_max) * 100).toFixed(0);
-	if (pct <= 95) {	// stall updates until we actually finish in case SD is writing slowly
-		w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = pct +'%';
-	}
-	w3_el('id-progress-time').innerHTML =
-		((sd_progress / 60) % 60).toFixed(0) +':'+ (sd_progress % 60).toFixed(0).leadingZeros(2);
-}
-
-function backup_sd_write_done(err)
-{
-	var el = w3_el('id-sd-status');
-	var msg = err? ('FAILED error '+ err.toString()) : 'WORKED';
-	if (err == 1) msg += '<br>No SD card inserted?';
-	if (err == 15) msg += '<br>rsync I/O error';
-	el.innerHTML = msg;
-	el.style.color = err? 'red':'lime';
-
-	if (!err) {
-		// force to max in case we never made it during updates
-		w3_el('id-progress-text').innerHTML = w3_el('id-progress').style.width = '100%';
-	}
-	kiwi_clearInterval(backup_sd_interval);
-	w3_el('id-progress-icon').innerHTML = '';
-}
-
-
-////////////////////////////////
 // GPS
 //		tracking tasks aren't stopped when !enabled
 ////////////////////////////////
@@ -1051,50 +1175,50 @@ var E1B_offset_i = { 0:'-1', 1:'-3/4', 2:'-1/2', 3:'-1/4', 4:'0', 5:'+1/4', 6:'+
 function gps_html()
 {
 	var s =
-	w3_divs('id-gps w3-hide', '',
-	   w3_col_percent('w3-vcenter', '',
-         w3_div('w3-section w3-container w3-vcenter w3-text-teal',
+	w3_div('id-gps w3-hide',
+	   w3_col_percent('w3-valign',
+         w3_div('w3-section w3-container w3-valign w3-text-teal',
             w3_div('w3-show-inline w3-margin-right', '<b>Enable<br>GPS?</b>') +
             w3_switch('', 'Yes', 'No', 'adm.enable_gps', adm.enable_gps, 'admin_radio_YN_cb')
          ), 15,
 
-         w3_div('w3-section w3-container w3-vcenter w3-text-teal',
+         w3_div('w3-section w3-container w3-valign w3-text-teal',
             w3_div('w3-show-inline w3-margin-right', '<b>Always<br>acquire?</b>') +
             w3_switch('w3-show-inline', 'Yes', 'No', 'adm.always_acq_gps', adm.always_acq_gps, 'admin_radio_YN_cb')
          ), 15,
 
-         w3_div('w3-section w3-container w3-vcenter w3-text-teal',
+         w3_div('w3-section w3-container w3-valign w3-text-teal',
             w3_div('w3-show-inline w3-margin-right', '<b>Include<br>alerted?</b>') +
             w3_switch('w3-show-inline', 'Yes', 'No', 'adm.include_alert_gps', adm.include_alert_gps, 'admin_radio_YN_cb')
          ), 15,
 
-         w3_div('w3-section w3-container w3-vcenter w3-text-teal',
+         w3_div('w3-section w3-container w3-valign w3-text-teal',
             w3_div('w3-show-inline w3-margin-right', '<b>Plot<br>Galileo?</b>') +
             w3_switch('w3-show-inline', 'Yes', 'No', 'adm.plot_E1B', adm.plot_E1B, 'admin_radio_YN_cb')
          ), 15,
 
          /*
-         w3_div('w3-section w3-container w3-vcenter w3-text-teal',
+         w3_div('w3-section w3-container w3-valign w3-text-teal',
             w3_div('w3-show-inline w3-margin-right', '<b>Include<br>Galileo?</b>') +
             w3_switch('w3-show-inline', 'Yes', 'No', 'adm.include_E1B', adm.include_E1B, 'admin_radio_YN_cb')
          ), 15,
          */
 
          /*
-         w3_div('w3-section w3-container w3-vcenter w3-text-teal',
+         w3_div('w3-section w3-container w3-valign w3-text-teal',
             w3_div('w3-show-inline w3-margin-right', '<b>E1B<br>offset</b>') +
 				w3_select('|color:red', '', 'chips', 'adm.E1B_offset', adm.E1B_offset, E1B_offset_i, 'gps_E1B_offset_cb')
          ), 15,
          */
 
          /*
-         w3_div('w3-section w3-container w3-vcenter w3-text-teal',
+         w3_div('w3-section w3-container w3-valign w3-text-teal',
             w3_div('w3-show-inline w3-margin-right', '<b>E1B<br>gain</b>') +
             w3_select('w3-margin-L-5|color:red', '', '', '_gps.gain', 0, '1:12', 'gps_gain_cb')
          ), 15,
          */
 
-         w3_div('w3-section w3-container w3-vcenter w3-hcenter w3-text-teal',
+         w3_div('w3-section w3-container w3-valign w3-hcenter w3-text-teal',
             w3_div('w3-margin-right', '<b>Graph</b>') +
             w3_radio_button('w3-margin-R-4', 'RSSI', 'adm.rssi_azel_iq', adm.rssi_azel_iq == _gps.RSSI, 'gps_graph_cb'),
             w3_radio_button('w3-margin-R-4', 'Az/El', 'adm.rssi_azel_iq', adm.rssi_azel_iq == _gps.AZEL, 'gps_graph_cb'),
@@ -1103,7 +1227,7 @@ function gps_html()
             w3_radio_button('', 'IQ', 'adm.rssi_azel_iq', adm.rssi_azel_iq == _gps.IQ, 'gps_graph_cb')
          ), 33,
 
-         w3_divs('w3-section w3-container w3-hcenter w3-text-teal', 'w3-center',
+         w3_divs('w3-section w3-container w3-hcenter w3-text-teal/w3-center',
             w3_div('id-gps-pos-scale w3-center',
                '<b>Scale</b> ',
                w3_select('w3-margin-L-5|color:red', '', '', '_gps.pos_scale', 10-1, '1:20', 'gps_pos_scale_cb')
@@ -1115,9 +1239,9 @@ function gps_html()
          ), 7
       ) +
 
-	   w3_div('w3-vcenter',
+	   w3_div('w3-valign',
          w3_div('id-gps-channels w3-container w3-section w3-card-8 w3-round-xlarge w3-pale-blue|width:100%',
-            w3_table('id-gps-ch w3-table w3-striped')
+            w3_table('id-gps-ch w3-table-6-8 w3-striped')
          ),
          w3_div('id-gps-gmap',
             w3_div('id-gps-map', ''),
@@ -1125,8 +1249,8 @@ function gps_html()
          )
 		) +
 
-		w3_divs('w3-container w3-section w3-card-8 w3-round-xlarge w3-pale-blue', '',
-			w3_table('id-gps-info w3-table')
+		w3_div('w3-container w3-section w3-card-8 w3-round-xlarge w3-pale-blue',
+			w3_table('id-gps-info w3-table-6-8')
 		)
 	);
 	return s;
@@ -1136,7 +1260,7 @@ function gps_graph_cb(id, idx)
 {
    idx = +idx;
    //console.log('gps_graph_cb idx='+ idx);
-   admin_int_zero_cb(id, idx);
+   admin_int_cb(id, idx);
    ext_send('SET gps_IQ_data_ch='+ ((idx == _gps.IQ)? _gps.iq_ch:0));
 
    w3_show_hide('id-gps-pos-scale', idx == _gps.POS);
@@ -1174,7 +1298,7 @@ function gps_pos_scale_cb(path, idx, first)
 	if (idx == -1 || first)
 	   idx = 10-1;
 	_gps.pos_scale = idx + 1;
-	console.log('gps_pos_scale_cb idx='+ idx +' path='+ path+' first='+ first +' pos_scale='+ _gps.pos_scale);
+	//console.log('gps_pos_scale_cb idx='+ idx +' path='+ path+' first='+ first +' pos_scale='+ _gps.pos_scale);
 }
 
 function gps_iq_ch_cb(path, idx, first)
@@ -1186,12 +1310,6 @@ function gps_iq_ch_cb(path, idx, first)
 	//console.log('gps_iq_ch_cb idx='+ idx +' path='+ path+' first='+ first +' iq_ch='+ _gps.iq_ch);
    ext_send('SET gps_IQ_data_ch='+ _gps.iq_ch);
    _gps.IQ_data = null;    // blank display until new data arrives
-}
-
-function gps_kick_pll_cb(id, ch)
-{
-	console.log('gps_kick_pll_cb ch='+ ch);
-	ext_send('SET gps_kick_pll_ch='+ ch);
 }
 
 function gps_gain_cb(path, idx, first)
@@ -1319,7 +1437,6 @@ function gps_update_admin_cb()
 			w3_table_heads('w3-center', 'status', 'subframe'),
 			w3_table_heads('w3-right-align', 'ov', 'az', 'el'),
 			(adm.rssi_azel_iq == _gps.RSSI)? null : w3_table_heads('w3-right-align', 'RSSI'),
-         (adm.rssi_azel_iq == _gps.IQ)? w3_table_heads('w3-center', 'PLL') : null,
          (adm.rssi_azel_iq == _gps.MAP)? null : 
             w3_table_heads('w3-center|width:35%',
                ((adm.rssi_azel_iq == _gps.IQ && _gps.iq_ch)? ('Channel '+ _gps.iq_ch +' ') : '') + gps_rssi_azel_iq_s[adm.rssi_azel_iq]
@@ -1332,7 +1449,7 @@ function gps_update_admin_cb()
 
 	w3_el("id-gps-ch").innerHTML = s;
 	
-	soln_color = (gps.soln == 0)? 'w3-green' : ((gps.soln == 1)? 'w3-yellow':'w3-red');
+	var soln_color = (gps.stype == 0)? 'w3-green' : ((gps.stype == 1)? 'w3-yellow':'w3-red');
 
 	for (var cn=0; cn < gps.ch.length; cn++) {
 		var ch = gps.ch[cn];
@@ -1348,7 +1465,7 @@ function gps_update_admin_cb()
       }
       //if (cn == 3) console.log('ch04 ch.prn='+ ch.prn +' ch.prn_s='+ ch.prn_s +' snr='+ ch.snr);
       
-		//var ch_soln_color = (gps.sep && ch.prn_s == 'E')? 'w3-yellow' : soln_color;
+		//var ch_soln_color = (adm.plot_E1B && ch.prn_s == 'E')? 'w3-yellow' : soln_color;
 		var ch_soln_color = soln_color;
 
       var unlock = ch.alert? 'A' : ((ch.ACF == 1)? '+' : ((ch.ACF == 2)? '-':'U'));
@@ -1391,14 +1508,6 @@ function gps_update_admin_cb()
             (adm.rssi_azel_iq == _gps.RSSI)? null : (ch.rssi? ch.rssi : '')
          );
 
-      if (adm.rssi_azel_iq == _gps.IQ) {
-         cells +=
-            w3_table_cells('w3-right-align',
-               (cn >= 4)? '' :
-               w3_button('id-kick-pll-'+ cn +' w3-small w3-aqua w3-round-large w3-padding-0 w3-padding-LR-8', 'Kick', 'gps_kick_pll_cb', cn)
-            );
-      }
-      
 	   if (adm.rssi_azel_iq == _gps.RSSI) {
          var pct = ((ch.rssi / max_rssi) * 100).toFixed(0);
          cells +=
@@ -1413,7 +1522,7 @@ function gps_update_admin_cb()
 	   if (adm.rssi_azel_iq != _gps.RSSI || adm.rssi_azel_iq != _gps.MAP) {
          if (cn == 0) {
             cells +=
-               w3_table_cells('|position:relative;|rowspan='+ gps.ch.length,
+               w3_table_cells('|vertical-align:top;position:relative;|rowspan='+ gps.ch.length,
                   w3_div('w3-hcenter',
                      ((adm.rssi_azel_iq == _gps.AZEL)?
                      '<img id="id-gps-azel-graph" src="gfx/gpsEarth.png" width="400" height="400" style="position:absolute" />':'') +
@@ -1457,6 +1566,11 @@ function gps_update_admin_cb()
    var ctx = gps_canvas.ctx;
    
    if (adm.rssi_azel_iq == _gps.RSSI) return;
+
+
+   ////////////////////////////////
+   // MAP
+   ////////////////////////////////
 
    if (adm.rssi_azel_iq == _gps.MAP) {
 
@@ -1519,6 +1633,11 @@ function gps_update_admin_cb()
       return;
    }
 
+
+   ////////////////////////////////
+   // IQ
+   ////////////////////////////////
+
    if (adm.rssi_azel_iq == _gps.IQ) {
       var axis = 400;
       ctx.fillStyle = 'hsl(0, 0%, 90%)';
@@ -1552,7 +1671,12 @@ function gps_update_admin_cb()
       
       return;
    }
+
    
+   ////////////////////////////////
+   // POS
+   ////////////////////////////////
+
    if (adm.rssi_azel_iq == _gps.POS) {
       var axis = 400;
       ctx.fillStyle = 'hsl(0, 0%, 90%)';
@@ -1571,7 +1695,7 @@ function gps_update_admin_cb()
       x0min = y0min = x1min = y1min = Number.MAX_VALUE;
       x0max = y0max = x1max = y1max = Number.MIN_VALUE;
       for (var i=0; i < len; i += 2) {
-         if (!gps.sep && i >= len/2) break;
+         if (!adm.plot_E1B && i >= len/2) break;
          ctx.fillStyle = (i < len/2)? "DeepSkyBlue":"black";
          var lat = _gps.POS_data.POS[i];
          if (lat == 0) continue;
@@ -1612,7 +1736,7 @@ function gps_update_admin_cb()
       line_stroke(ctx, 1, 1, 'DeepSkyBlue', x0min,y0min, x0min,y0max);
       line_stroke(ctx, 1, 1, 'DeepSkyBlue', x0max,y0min, x0max,y0max);
 
-      if (gps.sep) {
+      if (adm.plot_E1B) {
          if (x1max >= axis) x1max = axis-1;
          if (x1min < 0) x1min = 0;
          if (y1max >= axis) y1max = axis-1;
@@ -1636,10 +1760,10 @@ function gps_update_admin_cb()
       ctx.fillRect(x-2,y-2-yf, 5,5);
       x += xi;
       ctx.fillStyle = 'black';
-      ctx.fillText((gps.sep? ' w/o Galileo span: ':'All sats span: ')+
+      ctx.fillText((adm.plot_E1B? ' w/o Galileo span: ':'All sats span: ')+
          _gps.POS_data.y0span.toFixed(0).fieldWidth(4) +'m Ylat '+ _gps.POS_data.x0span.toFixed(0).fieldWidth(4) +'m Xlon', x,y);
 
-      if (gps.sep) {
+      if (adm.plot_E1B) {
          x -= xi;
          y += yi;
          ctx.fillStyle = 'black';
@@ -1656,6 +1780,11 @@ function gps_update_admin_cb()
    gps_schedule_azel(false);
 
    if (adm.rssi_azel_iq != _gps.AZEL || gps_el == null) return;
+
+
+   ////////////////////////////////
+   // AZEL
+   ////////////////////////////////
 
    var gW = 400;
    var gD = 360;
@@ -1773,15 +1902,15 @@ var nlog = 256;
 function log_html()
 {
 	var s =
-	w3_divs('id-log w3-text-teal w3-hide', '',
+	w3_div('id-log w3-text-teal w3-hide',
 		'<hr>'+
-		w3_divs('', 'w3-container',
+		w3_div('w3-container',
 		   w3_div('',
             w3_label('w3-show-inline', 'KiwiSDR server log (scrollable list, first and last set of messages)') +
             w3_button('w3-aqua|margin-left:10px', 'Dump', 'log_dump_cb') +
             w3_button('w3-blue|margin-left:10px', 'Clear Histogram', 'log_clear_hist_cb')
          ),
-			w3_divs('', 'id-log-msg w3-margin-T-8 w3-text-output w3-small w3-text-black', '')
+			w3_div('id-log-msg w3-margin-T-8 w3-text-output w3-small w3-text-black', '')
 		)
 	);
 	return s;
@@ -1851,16 +1980,16 @@ var console_status_msg_p = { scroll_only_at_bottom: true, process_return_nexttim
 function console_html()
 {
 	var s =
-	w3_divs('id-console w3-section w3-text-teal w3-hide', '',
-		w3_divs('', 'w3-container',
+	w3_div('id-console w3-section w3-text-teal w3-hide',
+		w3_div('w3-container',
 		   w3_div('',
             w3_label('w3-show-inline', 'Beagle Debian console') +
             w3_button('w3-aqua|margin-left:10px', 'Connect', 'console_connect_cb')
          ),
-			w3_divs('', 'id-console-msg w3-margin-T-8 w3-text-output w3-scroll-down w3-small w3-text-black',
+			w3_div('id-console-msg w3-margin-T-8 w3-text-output w3-scroll-down w3-small w3-text-black',
 			   '<pre><code id="id-console-msgs"></code></pre>'
 			),
-         w3_divs('w3-margin-top', '',
+         w3_div('w3-margin-top',
             w3_input('', '', 'console_input', '', 'console_input_cb|console_ctrl_C_cb|console_ctrl_D_cb|console_ctrl_backslash_cb', 'enter shell command')
          ),
          /*
@@ -1927,6 +2056,115 @@ function console_blur(id)
 }
 
 
+////////////////////////////////
+// extensions, in admin_sdr.js
+////////////////////////////////
+
+
+////////////////////////////////
+// security
+////////////////////////////////
+
+function security_html()
+{
+   // Let cfg.chan_no_pwd retain values > rx_chans if it was set when another configuration
+   // was used. Just clamp the menu value to the current rx_chans;
+	var chan_no_pwd = ext_get_cfg_param('chan_no_pwd', 0);
+	chan_no_pwd = Math.min(chan_no_pwd, rx_chans - 1);
+   var chan_no_pwd_u = { 0:'none' };
+   for (var i = 1; i < rx_chans; i++)
+      chan_no_pwd_u[i] = i.toFixed(0);
+
+	var s =
+	w3_div('id-security w3-hide',
+		'<hr>' +
+		w3_inline_percent('w3-container/w3-hspace-16 w3-text-teal',
+			w3_div('',
+				w3_div('',
+					'<b>User auto-login from local net<br>even if password set?</b><br>',
+					w3_switch('w3-margin-T-8', 'Yes', 'No', 'adm.user_auto_login', adm.user_auto_login, 'admin_radio_YN_cb')
+				)
+			), 25,
+
+			w3_div('w3-center',
+				w3_select('', 'Number of channels<br>not requiring a password<br>even if password set',
+					'', 'chan_no_pwd', chan_no_pwd, chan_no_pwd_u, 'admin_select_cb'),
+				w3_div('w3-margin-T-8 w3-text-black',
+					'Set this and a password to create two sets of channels. ' +
+					'Some that have open-access requiring no password and some that are password protected.'
+				)
+			), 25,
+
+			w3_div('',
+				w3_input('', 'User password', 'adm.user_password', '', 'w3_string_set_cfg_cb',
+					'No password set: unrestricted Internet access to SDR')
+			), 50
+		) +
+		'<hr>' +
+		w3_inline_percent('w3-container/w3-hspace-16 w3-text-teal',
+			w3_div('',
+				w3_div('',
+					'<b>Admin auto-login from local net<br>even if password set?</b><br>',
+					w3_switch('w3-margin-T-8', 'Yes', 'No', 'adm.admin_auto_login', adm.admin_auto_login, 'admin_radio_YN_cb')
+				)
+			), 25,
+
+			w3_div('w3-text-teal',
+				''
+			), 25,
+
+			w3_div('',
+				w3_input('', 'Admin password', 'adm.admin_password', '', 'w3_string_set_cfg_cb',
+					'No password set: no admin access from Internet allowed')
+			), 50
+		) +
+		'<hr>' +
+		w3_inline_percent('w3-container/w3-hspace-16 w3-text-teal',
+			w3_div('',
+				w3_div('',
+					'<b>Allow GPS timestamp information <br> to be sent on the network?</b><br>',
+					w3_switch('w3-margin-T-8', 'Yes', 'No', 'adm.GPS_tstamp', adm.GPS_tstamp, 'admin_radio_YN_cb')
+				)
+			), 25,
+
+			w3_div('w3-text-black',
+				'Set to "No" to prevent timestamp information from your GPS ' +
+				'(assuming it is working) from being used by applications on the Internet ' +
+				'such as the TDoA service. You would only do this if you had some concern ' +
+				'about your publicly-listed Kiwi participating in these kinds of projects. '
+			), 33,
+
+			w3_div('w3-text-black'), 1,
+
+			w3_div('w3-text-black',
+				'However we expect most Kiwi owners will want to participate and we encourage ' +
+				'you to do so. Your precise GPS location is not revealed by the timestamp information. ' +
+				'For more discussion please see the ' +
+				w3_link('w3-link-darker-color',
+				   'http://valentfx.com/vanilla/discussion/1218/participation-of-kiwis-in-the-tdoa-process',
+				   'Kiwi forums'
+				) +'.'
+			), 33
+		) +
+		'<hr>' +
+		//w3_div('id-security-json w3-section w3-border')
+		''
+	);
+	return s;
+}
+
+function security_focus(id)
+{
+	admin_set_decoded_value('adm.user_password');
+	admin_set_decoded_value('adm.admin_password');
+	//w3_el('id-security-json').innerHTML = w3_div('w3-padding w3-scroll', JSON.stringify(cfg));
+}
+
+
+////////////////////////////////
+// admin
+////////////////////////////////
+
 var admin_colors = [
 	'w3-hover-red',
 	'w3-hover-blue',
@@ -1942,86 +2180,9 @@ var admin_colors = [
 	'w3-hover-lime',
 	'w3-hover-indigo',
 	'w3-hover-brown',
-	'w3-hover-teal'
+	'w3-hover-teal',
+	'w3-hover-blue-grey'
 ];
-
-
-////////////////////////////////
-// security
-////////////////////////////////
-
-// FIXME: breaks if we someday add more channels
-var chan_no_pwd_u = { 0:'none', 1:'1', 2:'2', 3:'3' };
-
-function security_html()
-{
-	var chan_no_pwd = ext_get_cfg_param('chan_no_pwd', 0);
-
-	var s =
-	w3_divs('id-security w3-hide', '',
-		'<hr>' +
-		w3_col_percent('w3-container w3-vcenter', 'w3-hspace-16 w3-text-teal',
-			w3_divs('', '',
-				w3_divs('', '',
-					'<b>User auto-login from local net<br>even if password set?</b><br>',
-					w3_divs('w3-margin-T-8', '',
-						w3_switch('', 'Yes', 'No', 'adm.user_auto_login', adm.user_auto_login, 'admin_radio_YN_cb')
-					)
-				)
-			), 25,
-
-			w3_divs('', 'w3-center',
-				w3_select('', 'Number of channels<br>not requiring a password<br>even if password set',
-					'', 'chan_no_pwd', chan_no_pwd, chan_no_pwd_u, 'admin_select_cb'),
-				w3_divs('', 'w3-margin-T-8 w3-text-black',
-					'Set this and a password to create a two sets of channels, ' +
-					'some that have open-access requiring no password and some that are password protected.'
-				)
-			), 25,
-
-			w3_divs('', '',
-				w3_input('', 'User password', 'adm.user_password', '', 'w3_string_set_cfg_cb',
-					'No password set: unrestricted Internet access to SDR')
-			), 50
-		) +
-		'<hr>' +
-		w3_col_percent('w3-container w3-vcenter', 'w3-hspace-16 w3-text-teal',
-			w3_divs('', '',
-				w3_divs('', '',
-					'<b>Admin auto-login from local net<br>even if password set?</b><br>',
-					w3_divs('w3-margin-T-8', '',
-						w3_switch('', 'Yes', 'No', 'adm.admin_auto_login', adm.admin_auto_login, 'admin_radio_YN_cb')
-					)
-				)
-			), 25,
-
-			w3_divs('w3-text-teal', '',
-				''
-			), 25,
-
-			w3_divs('', '',
-				w3_input('', 'Admin password', 'adm.admin_password', '', 'w3_string_set_cfg_cb',
-					'No password set: no admin access from Internet allowed')
-			), 50
-		) +
-		'<hr>' +
-		//w3_divs('id-security-json w3-section w3-border', '')
-		''
-	);
-	return s;
-}
-
-function security_focus(id)
-{
-	admin_set_decoded_value('adm.user_password');
-	admin_set_decoded_value('adm.admin_password');
-	//w3_el('id-security-json').innerHTML = w3_divs('w3-padding w3-scroll', '', JSON.stringify(cfg));
-}
-
-
-////////////////////////////////
-// admin
-////////////////////////////////
 
 function admin_main()
 {
@@ -2052,6 +2213,7 @@ function admin_draw(sdr_mode)
 	   s = w3_navdef(admin_colors[ci++], 'GPS', 'gps') +
 	       w3_nav(admin_colors[ci++], 'Status', 'status');
 	s +=
+      w3_nav(admin_colors[ci++], 'Mode', 'mode') +
       w3_nav(admin_colors[ci++], 'Control', 'control') +
       w3_nav(admin_colors[ci++], 'Connect', 'connect');
 	if (sdr_mode)
@@ -2060,7 +2222,7 @@ function admin_draw(sdr_mode)
          w3_nav(admin_colors[ci++], 'Config', 'config') +
          w3_nav(admin_colors[ci++], 'Webpage', 'webpage') +
          w3_nav(admin_colors[ci++], 'sdr.hu', 'sdr_hu') +
-         w3_nav(admin_colors[ci++], 'DX list', 'dx');
+         w3_nav(admin_colors[ci++], 'DX', 'dx');
    s += 
       w3_nav(admin_colors[ci++], 'Update', 'update') +
       w3_nav(admin_colors[ci++], 'Backup', 'backup') +
@@ -2073,27 +2235,26 @@ function admin_draw(sdr_mode)
       w3_nav(admin_colors[ci++], 'Security', 'security');
 
 	admin.innerHTML =
-		w3_divs('id-admin-header-container', '',
+		w3_div('id-admin-header-container',
 			'<header class="w3-container w3-teal"><h5>Admin interface</h5></header>' +
-			'<nav class="w3-navbar w3-border w3-light-grey">' +
-			   s +
-			'</nav>' +
+			w3_navbar('w3-border w3-light-grey', s) +
 	
-			w3_divs('id-restart w3-hide', 'w3-vcenter',
+			w3_divs('id-restart w3-hide/w3-valign',
 				'<header class="w3-show-inline-block w3-container w3-red"><h5>Restart required for changes to take effect</h5></header>' +
-				w3_div('w3-show-inline-block', w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'admin_restart_now_cb'))
+				w3_div('w3-show-inline-block', w3_button('w3-aqua w3-margin', 'KiwiSDR server restart', 'admin_restart_now_cb')) +
+				w3_div('w3-show-inline-block', w3_button('w3-yellow w3-margin', 'cancel', 'admin_restart_cancel_cb'))
 			) +
 			
-			w3_divs('id-reboot w3-hide', 'w3-vcenter',
+			w3_divs('id-reboot w3-hide/w3-valign',
 				'<header class="w3-show-inline-block w3-container w3-red"><h5>Reboot required for changes to take effect</h5></header>' +
 				w3_div('w3-show-inline-block', w3_button('w3-blue w3-margin', 'Beagle reboot', 'admin_reboot_now_cb'))
 			) +
 			
-			w3_divs('id-build-restart w3-vcenter w3-hide', '',
+			w3_div('id-build-restart w3-valign w3-hide',
 				'<header class="w3-container w3-blue"><h5>Server will restart after build</h5></header>'
 			) +
 
-			w3_divs('id-build-reboot w3-vcenter w3-hide', '',
+			w3_div('id-build-reboot w3-valign w3-hide',
 				'<header class="w3-container w3-red"><h5>Beagle will reboot after build</h5></header>'
 			)
 		);
@@ -2104,6 +2265,7 @@ function admin_draw(sdr_mode)
 	   s = gps_html() + status_html();
 
 	s +=
+		mode_html() +
 		control_html() +
 		connect_html();
 
@@ -2208,6 +2370,11 @@ function admin_msg(data)
             console.log('kiwi_msg() gps_az_el_history_cb: JSON parse fail');
          }
          break;					
+
+		case "dx_json":
+			console.log('dx_json len='+ param[1].length);
+			dx_json(JSON.parse(param[1]));
+			break;					
    }
 }
 
@@ -2228,8 +2395,8 @@ function admin_recv(data)
 		//console.log('admin_recv: '+ param[0]);
 		switch (param[0]) {
 
-			case "sdr_mode":
-				admin_sdr_mode = +param[1];
+			case "gps_only_mode":
+				admin_sdr_mode = (+param[1])? 0:1;
 				break;
 
 			case "init":
@@ -2397,7 +2564,7 @@ function admin_wait_then_reload(secs, msg)
 	
 	if (secs) {
 		s2 =
-			w3_divs('w3-vcenter w3-margin-T-8', 'w3-container',
+			w3_divs('w3-valign w3-margin-T-8/w3-container',
 				w3_div('w3-show-inline-block', kiwi_pie('id-admin-pie', admin_pie_size, '#eeeeee', 'deepSkyBlue')),
 				w3_div('w3-show-inline-block',
 					w3_div('id-admin-reload-msg'),
@@ -2406,7 +2573,7 @@ function admin_wait_then_reload(secs, msg)
 			);
 	} else {
 		s2 =
-			w3_divs('w3-vcenter w3-margin-T-8', 'w3-container',
+			w3_divs('w3-valign w3-margin-T-8/w3-container',
 				w3_div('id-admin-reload-msg')
 			);
 	}
@@ -2430,6 +2597,11 @@ function admin_restart_now_cb()
 	admin_wait_then_reload(60, 'Restarting KiwiSDR server');
 }
 
+function admin_restart_cancel_cb()
+{
+	w3_hide('id-restart');
+}
+
 function admin_reboot_now_cb()
 {
 	ext_send('SET reboot');
@@ -2450,48 +2622,30 @@ function admin_confirm_cb()
 	}
 }
 
-function admin_int_null_cb(path, val, first)
+function admin_int_cb(path, val)
 {
-	var v = parseInt(val);
-	//console.log('admin_int_null_cb '+ typeof val +' "'+ val +'" '+ v);
-	if (isNaN(v)) v = null;
-
-	// if first time don't save, otherwise always save
-	var save = (first != undefined)? (first? false : true) : true;
-	ext_set_cfg_param(path, v, save);
-}
-
-function admin_int_zero_cb(path, val)
-{
-	//console.log('admin_int_zero_cb '+ path +'='+ val);
+	//console.log('admin_int_cb '+ path +'='+ val);
 	val = parseInt(val);
 	if (isNaN(val)) {
-		val = 0;
+	   // put old value back
+	   val = ext_get_cfg_param(path);
 		w3_set_value(path, val);
+	} else {
+	   ext_set_cfg_param(path, val, true);
 	}
-	ext_set_cfg_param(path, val, true);
 }
 
-function admin_float_null_cb(path, val, first)
+function admin_float_cb(path, val)
 {
-	var v = parseFloat(val);
-	//console.log('admin_float_cb '+ typeof val +' "'+ val +'" '+ v);
-	if (isNaN(v)) v = null;
-
-	// if first time don't save, otherwise always save
-	var save = (first != undefined)? (first? false : true) : true;
-	ext_set_cfg_param(path, val, save);
-}
-
-function admin_float_zero_cb(path, val)
-{
-	//console.log('admin_float_zero_cb '+ path +'='+ val);
+	//console.log('admin_float_cb '+ path +'='+ val);
 	val = parseFloat(val);
 	if (isNaN(val)) {
-		val = 0;
+	   // put old value back
+	   val = ext_get_cfg_param(path);
 		w3_set_value(path, val);
+	} else {
+	   ext_set_cfg_param(path, val, true);
 	}
-	ext_set_cfg_param(path, val, true);
 }
 
 function admin_bool_cb(path, val, first)

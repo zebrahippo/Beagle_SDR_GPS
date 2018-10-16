@@ -50,11 +50,11 @@
 
 #define	MISC_TASKS			6					// main, stats, spi, data pump, web server, sdr_hu
 #define GPS_TASKS			(GPS_CHANS + 3)		// chan*n + search + solve + stat
-#define	RX_TASKS			(RX_CHANS * 2)		// SND, W/F
-#define	EXT_TASKS			RX_CHANS			// each extension server-side part runs as a separate task
+#define	RX_TASKS			(MAX_RX_CHANS * 2)  // SND, W/F
+#define	EXT_TASKS			MAX_RX_CHANS        // each extension server-side part runs as a separate task
+#define	EXTRA_TASKS			(MAX_RX_CHANS * 4)  // additional tasks created by extensions etc.
 #define	ADMIN_TASKS			4					// simultaneous admin connections
-#define	EXTRA_TASKS			16
-#define	MAX_TASKS           (MISC_TASKS + GPS_TASKS + RX_TASKS + EXT_TASKS + ADMIN_TASKS + EXTRA_TASKS)
+#define	MAX_TASKS           (MISC_TASKS + GPS_TASKS + RX_TASKS + EXT_TASKS + EXTRA_TASKS + ADMIN_TASKS)
 
 typedef int tid_t;
 
@@ -88,7 +88,12 @@ void *_TaskSleep(const char *reason, int usec);
 #define TaskSleepReasonSec(r, s)    _TaskSleep(r, SEC_TO_USEC(s))
 
 void TaskSleepID(int id, int usec);
-void TaskWakeup(int id, bool check_waking, void *wake_param);
+
+#define TWF_NONE                0x0000
+#define TWF_CHECK_WAKING        0x0001
+#define TWF_CANCEL_DEADLINE     0x0002
+
+void TaskWakeup(int id, u4_t flags, void *wake_param);
 
 typedef enum {
 	CALLED_FROM_INIT,

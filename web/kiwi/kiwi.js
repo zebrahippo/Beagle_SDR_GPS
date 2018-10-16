@@ -5,7 +5,7 @@
 var WATERFALL_CALIBRATION_DEFAULT = -13;
 var SMETER_CALIBRATION_DEFAULT = -13;
 
-var rx_chans, rx_chan;
+var rx_chans, wf_chans, rx_chan;
 var try_again="";
 var conn_type;
 var seriousError = false;
@@ -13,6 +13,10 @@ var seriousError = false;
 var modes_u = { 0:'AM', 1:'AMN', 2:'USB', 3:'LSB', 4:'CW', 5:'CWN', 6:'NBFM', 7:'IQ' };
 var modes_l = { 0:'am', 1:'amn', 2:'usb', 3:'lsb', 4:'cw', 5:'cwn', 6:'nbfm', 7:'iq' };
 var modes_s = { 'am':0, 'amn':1, 'usb':2, 'lsb':3, cw:4, 'cwn':5, 'nbfm':6, 'iq':7 };
+
+var types = { 0:'active', 1:'watch-list', 2:'sub-band', 3:'DGPS', 4:'NoN' , 5:'interference' };
+var types_s = { active:0, watch_list:1, sub_band:2, DGPS:3, NoN:4 , interference:5 };
+var type_colors = { 0:'cyan', 0x10:'lightPink', 0x20:'aquamarine', 0x30:'lavender', 0x40:'violet' , 0x50:'violet' };
 
 var timestamp;
 
@@ -84,6 +88,36 @@ function kiwi_open_ws_cb(p)
 	ext_hasCredential(p.conn_type, kiwi_valpwd1_cb, p);
 }
 
+var kiwi = {
+   loaded_files: {},
+};
+
+// NB: NOT reentrant.
+// Especially relevant if it async load hangs waiting for a host to timeout.
+function kiwi_load_js(js_files, cb)
+{
+	console.log('LOAD START');
+	// kiwi_js_load.js will begin running only after all others have loaded and run.
+	// Can then safely call the callback.
+	js_files.push('kiwi/kiwi_js_load.js?cb='+ cb);
+
+   js_files.forEach(function(src) {
+      // only load once in case used in multiple places (e.g. Google maps)
+      if (!kiwi.loaded_files[src]) {
+         kiwi.loaded_files[src] = 1;
+         var script = document.createElement('script');
+         script.src = src;
+         script.type = 'text/javascript';
+         script.async = false;
+         document.head.appendChild(script);
+         console.log('loaded '+ src);
+      } else {
+         console.log('already loaded: '+ src);
+      }
+   });
+	console.log('LOAD FINISH');
+}
+
 function kiwi_ask_pwd(conn_kiwi)
 {
 	console.log('kiwi_ask_pwd chan_no_pwd='+ chan_no_pwd +' client_public_ip='+ client_public_ip);
@@ -91,7 +125,7 @@ function kiwi_ask_pwd(conn_kiwi)
 		((conn_kiwi && chan_no_pwd)? 'All channels busy that don\'t require a password ('+ chan_no_pwd +'/'+ rx_chans +')<br>':'') +
 		"<form name='pform' style='display:inline-block' action='#' onsubmit='ext_valpwd(\""+ conn_type +"\", this.pwd.value); return false;'>"+
 			try_again +
-			w3_input('w3-margin-left w3-label-inline kiwi-pw w3-label-not-bold|padding:1px|name="pwd" size=40 onclick="this.focus(); this.select()"', 'Password:') +
+			w3_input('w3-label-inline w3-label-not-bold/kiwi-pw|padding:1px|name="pwd" size=40 onclick="this.focus(); this.select()"', 'Password:') +
 		"</form>";
 	kiwi_show_msg(s);
 	document.pform.pwd.focus();
@@ -113,6 +147,10 @@ function kiwi_valpwd1_cb(badp, p)
 	} else
 	if (badp == 2) {
 	   kiwi_show_msg('Still determining local interface address.<br>Please try reloading page in a few moments.');
+	   return;
+	} else
+	if (badp == 3) {
+	   kiwi_show_msg('Admin connections not allowed from this ip address.');
 	   return;
 	} else
 	if (badp == 0) {
@@ -282,7 +320,7 @@ function kiwi_geolocate(which)
             if (geo.retry++ <= 3)
                kiwi_geolocate(which+1);
          }
-      }, 5000
+      }, null, 5000
    );
 }
 
@@ -323,7 +361,7 @@ function kiwi_geojson()
 // time display
 ////////////////////////////////
 
-var server_time_utc, server_time_local, server_time_tzid, server_time_tzname;
+var server_time_utc, server_time_local, server_time_tzid, server_time_tzname, server_tz;
 var time_display_current = true;
 
 function time_display_cb(o)
@@ -332,7 +370,9 @@ function time_display_cb(o)
 	server_time_utc = o.tu;
 	server_time_local = o.tl;
 	server_time_tzid = decodeURIComponent(o.ti);
-	server_time_tzname = decodeURIComponent(o.tn);
+	server_time_tzname = decodeURIComponent(o.tn).replace(/\\/g, '').replace(/_/g, ' ');
+	server_tz = server_time_tzname;
+	if (server_time_tzid) server_tz += ' ('+ server_time_tzid +')';
 
 	if (!time_display_started) {
 		time_display_periodic();
@@ -349,7 +389,7 @@ function time_display(display_time)
 	var noLatLon = (server_time_local == '' || server_time_tzname == 'null');
 	w3_el('id-time-display-UTC').innerHTML = server_time_utc? server_time_utc : '?';
 	w3_el('id-time-display-local').innerHTML = noLatLon? '?' : server_time_local;
-	w3_el('id-time-display-tzname').innerHTML = noLatLon? 'Lat/lon needed for local time' : server_time_tzname;
+	w3_el('id-time-display-tzname').innerHTML = noLatLon? 'Lat/lon needed for local time' : server_tz;
 
 	w3_el('id-time-display-logo-inner').style.opacity = display_time? 0:1;
 	w3_el('id-time-display-inner').style.opacity = display_time? 1:0;
@@ -380,25 +420,23 @@ function time_display_setup(ext_name_or_id)
 	
 	var el = w3_el(ext_name_or_id);
 	el.innerHTML =
-		'<div id="id-time-display-inner">' +
-			'<div id="id-time-display-text-inner">' +
-				w3_divs('', 'w3-vcenter',
-					w3_divs('', 'w3-show-inline-block',
-						w3_div('id-time-display-UTC'),
-						w3_div('cl-time-display-text-suffix', 'UTC')
-					),
-					w3_divs('', 'w3-show-inline-block',
-						w3_div('id-time-display-local'),
-						w3_div('cl-time-display-text-suffix', 'Local')
-					),
-					w3_div('id-time-display-tzname w3-hcenter')
-				) +
-			'</div>' +
-		'</div>' +
-		'<div id="id-time-display-logo-inner">' +
-			'<div id="id-time-display-logo-text">Powered by</div>' +
-			'<a href="http://openwebrx.org/" target="_blank"><img id="id-time-display-logo" src="gfx/openwebrx-top-logo.png" /></a>' +
-		'</div>';
+		w3_div('id-time-display-inner',
+			w3_div('id-time-display-text-inner',
+            w3_inline('',
+               w3_div('id-time-display-UTC'),
+               w3_div('cl-time-display-text-suffix', 'UTC')
+            ),
+            w3_inline('',
+               w3_div('id-time-display-local'),
+               w3_div('cl-time-display-text-suffix', 'Local')
+            ),
+            w3_div('id-time-display-tzname')
+			)
+		) +
+		w3_div('id-time-display-logo-inner',
+			w3_div('id-time-display-logo-text', 'Powered by'),
+			'<a href="http://openwebrx.org/" target="_blank"><img id="id-time-display-logo" src="gfx/openwebrx-top-logo.png" /></a>'
+		);
 
 	time_display(time_display_current);
 }
@@ -425,13 +463,13 @@ function show_pref()
 {
 	pref_load(function() {
 		var s =
-			w3_divs('w3-text-css-yellow', 'w3-tspace-16',
-				w3_divs('', 'w3-medium w3-text-aqua', '<b>User preferences</b>'),
-				w3_col_percent('', '',
+			w3_divs('w3-text-css-yellow/w3-tspace-16',
+				w3_div('w3-medium w3-text-aqua', '<b>User preferences</b>'),
+				w3_col_percent('',
 					w3_input('', 'Pref', 'pref.p', pref.p, 'pref_p_cb', 'something'), 30
 				),
 				
-				w3_divs('', 'w3-show-inline-block w3-hspace-16',
+				w3_div('w3-show-inline-block w3-hspace-16',
 					w3_button('', 'Export', 'pref_export_btn_cb'),
 					w3_button('', 'Import', 'pref_import_btn_cb'),
 					'<b>Status:</b> ' + w3_div('id-pref-status w3-show-inline-block w3-snap-back')
@@ -622,7 +660,10 @@ function gps_stats_cb(acquiring, tracking, good, fixes, adc_clock, adc_gps_clk_c
 {
    var s = (acquiring? 'yes':'pause') +', track '+ tracking +', good '+ good +', fixes '+ fixes.toUnits();
 	w3_el_softfail('id-msg-gps').innerHTML = 'GPS acquire '+ s;
-	w3_innerHTML('id-status-gps', w3_text(optbar_prefix_color, 'GPS') +' acq '+ s);
+	w3_innerHTML('id-status-gps',
+	   w3_text(optbar_prefix_color, 'GPS'),
+	   w3_text('', 'acq '+ s)
+	);
 	extint_adc_clock_Hz = adc_clock * 1e6;
 	extint_adc_gps_clock_corr = adc_gps_clk_corrections;
 	if (adc_gps_clk_corrections) {
@@ -637,16 +678,17 @@ function admin_stats_cb(audio_dropped, underruns, seq_errors, dpump_resets, dpum
    if (audio_dropped == undefined) return;
    
 	var el = w3_el('id-msg-errors');
-	if (el) el.innerHTML = 'Errors: '+ audio_dropped +' dropped, '+ underruns +' underruns, '+ seq_errors +' sequence';
+	if (el) el.innerHTML = 'Stats: '+
+	   audio_dropped.toUnits() +' dropped, '+
+	   underruns.toUnits() +' underruns, '+
+	   seq_errors.toUnits() +' sequence, '+
+	   dpump_resets.toUnits() +' realtime';
 
-	el = w3_el('id-status-dpump-resets');
-   if (el) el.innerHTML = 'Data pump resets: '+ dpump_resets;
-   
 	el = w3_el('id-status-dpump-hist');
 	if (el) {
-	   var s = 'Data pump histogram: ';
+	   var s = 'Realtime response histogram: ';
 		for (var i = 0; i < dpump_nbufs; i++) {
-		   s += (i? ', ':'') + dpump_hist[i];
+		   s += (i? ', ':'') + dpump_hist[i].toUnits();
 		}
       el.innerHTML = s;
 	}
@@ -655,7 +697,7 @@ function admin_stats_cb(audio_dropped, underruns, seq_errors, dpump_resets, dpum
 function kiwi_too_busy(rx_chans)
 {
 	var s = 'Sorry, the KiwiSDR server is too busy right now ('+ rx_chans+((rx_chans>1)? ' users':' user') +' max). <br>' +
-	'Please check <a href="http://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
+	'Please check <a href="https://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
 	kiwi_show_msg(s);
 }
 
@@ -670,7 +712,7 @@ function kiwi_show_error_ask_exemption(s)
 {
    s += '<br><br>If you have an exemption password from the KiwiSDR owner/admin <br> please enter it here: ' +
       '<form name="pform" style="display:inline-block" action="#" onsubmit="kiwi_ip_limit_pwd_cb(this.pinput.value); return false">' +
-			w3_input('w3-margin-left w3-label-inline kiwi-pw w3-label-not-bold|padding:1px|name="pinput" size=40 onclick="this.focus(); this.select()"', 'Password:') +
+			w3_input('w3-label-inline w3-label-not-bold/kiwi-pw|padding:1px|name="pinput" size=40 onclick="this.focus(); this.select()"', 'Password:') +
       '</form>';
 
 	kiwi_show_msg(s);
@@ -687,7 +729,7 @@ function kiwi_24hr_ip_limit(mins, ip)
 {
 	var s = 'Sorry, this KiwiSDR can only be used for '+ mins +' minutes every 24 hours by each IP address.<br>' +
       //'Your IP address is: '+ ip +'<br>' +
-      'Please check <a href="http://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
+      'Please check <a href="https://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
 	
 	kiwi_show_error_ask_exemption(s);
 }
@@ -709,7 +751,7 @@ function kiwi_down(type, comp_ctr, reason)
 
 	if (type == 1) {
 		s = 'Sorry, software update in progress. Please check back in a few minutes.<br>' +
-			'Or check <a href="http://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
+			'Or check <a href="https://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
 		
 		if (comp_ctr > 0 && comp_ctr < 9000)
 			s += '<br>Build: compiling file #'+ comp_ctr;
@@ -728,7 +770,7 @@ function kiwi_down(type, comp_ctr, reason)
 	} else {
 		if (reason == null || reason == '') {
 			reason = 'Sorry, this KiwiSDR server is being used for development right now. <br>' +
-				'Please check <a href="http://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
+				'Please check <a href="https://sdr.hu/?top=kiwi" target="_self">sdr.hu</a> for more KiwiSDR receivers available world-wide.';
 		}
 		s = reason;
 	}
@@ -770,8 +812,10 @@ var kiwi_xfer_stats_str_long = "";
 
 function xfer_stats_cb(audio_kbps, waterfall_kbps, waterfall_fps, waterfall_total_fps, http_kbps, sum_kbps)
 {
-	kiwi_xfer_stats_str = w3_text(optbar_prefix_color, 'Net') +' aud '+ audio_kbps.toFixed(0) +', wf '+ waterfall_kbps.toFixed(0) +', http '+
-		http_kbps.toFixed(0) +', total '+ sum_kbps.toFixed(0) +' kB/s';
+	kiwi_xfer_stats_str =
+	   w3_text(optbar_prefix_color, 'Net') +
+	   w3_text('', 'aud '+ audio_kbps.toFixed(0) +', wf '+ waterfall_kbps.toFixed(0) +', http '+
+		http_kbps.toFixed(0) +', total '+ sum_kbps.toFixed(0) +' kB/s');
 
 	kiwi_xfer_stats_str_long = 'audio '+audio_kbps.toFixed(0)+' kB/s, waterfall '+waterfall_kbps.toFixed(0)+
 		' kB/s ('+waterfall_fps.toFixed(0)+'/'+waterfall_total_fps.toFixed(0)+' fps)' +
@@ -785,9 +829,13 @@ var kiwi_config_str_long = '';
 
 function cpu_stats_cb(uptime_secs, user, sys, idle, ecpu, waterfall_fps, waterfall_total_fps)
 {
-	kiwi_cpu_stats_str = w3_text(optbar_prefix_color, 'Beagle') +' '+ user +'%u '+ sys +'%s '+ idle +'%i, '+
-	   w3_text(optbar_prefix_color, 'FPGA') +' '+ ecpu.toFixed(0) +'%, '+
-	   w3_text(optbar_prefix_color, 'FPS') +' '+ waterfall_fps.toFixed(0) +'|'+ waterfall_total_fps.toFixed(0);
+	kiwi_cpu_stats_str =
+	   w3_text(optbar_prefix_color, 'Beagle') +
+	   w3_text('', user +'%u '+ sys +'%s '+ idle +'%i,') +
+	   w3_text(optbar_prefix_color, 'FPGA') +
+	   w3_text('', ecpu.toFixed(0) +'%') +
+	   w3_text(optbar_prefix_color, 'FPS') +
+	   w3_text('', waterfall_fps.toFixed(0) +'|'+ waterfall_total_fps.toFixed(0));
 	kiwi_cpu_stats_str_long = 'Beagle CPU '+ user +'% usr / '+ sys +'% sys / '+ idle +'% idle, FPGA eCPU '+ ecpu.toFixed(0) +'%';
 
 	var t = uptime_secs;
@@ -796,10 +844,13 @@ function cpu_stats_cb(uptime_secs, user, sys, idle, ecpu, waterfall_fps, waterfa
 	var hr  = Math.trunc(t % 24); t = Math.trunc(t/24);
 	var days = t;
 
-	var s = w3_text(optbar_prefix_color, 'Up') +' ';
+	var s = ' ';
 	if (days) s += days +'d:';
 	s += hr +':'+ min.leadingZeros(2) +':'+ sec.leadingZeros(2);
-	w3_innerHTML('id-status-config', w3_div('', s +', '+ kiwi_config_str));
+	w3_innerHTML('id-status-config',
+      w3_text(optbar_prefix_color, 'Up'),
+      w3_text('', s +', '+ kiwi_config_str)
+	);
 
 	s = ' | Uptime: ';
 	if (days) s += days +' '+ ((days > 1)? 'days':'day') +' ';
@@ -825,13 +876,13 @@ function config_cb(rx_chans, gps_chans, serno, pub, port_ext, pvt, port_int, nm,
 	var net_config = w3_el("id-net-config");
 	if (net_config) {
 		net_config.innerHTML =
-			w3_divs('', '',
-				w3_col_percent('', '',
+			w3_div('',
+				w3_col_percent('',
 					w3_div('', 'Public IP address (outside your firewall/router): '+ pub +' [port '+ port_ext +']'), 50,
 					w3_div('', 'Ethernet MAC address: '+ mac.toUpperCase()), 30,
 					w3_div('', 'KiwiSDR serial number: '+ serno), 20
 				),
-				w3_col_percent('', '',
+				w3_col_percent('',
 					w3_div('', 'Private IP address (inside your firewall/router): '+ pvt +' [port '+ port_int +']'), 50,
 					w3_div('', 'Private netmask: /'+ nm), 50
 				)
@@ -926,7 +977,7 @@ function user_cb(obj)
 			var f = (f/1000).toFixed((f > 100e6)? 1:2);
 			var f_s = f + ' kHz ';
 			var fo = (freq/1000).toFixed(2);
-			var anchor = '<a href="javascript:tune('+ fo +','+ q(mode) +','+ zoom +');">';
+			var anchor = '<a href="javascript:tune('+ fo +','+ sq(mode) +','+ zoom +');">';
 			if (ext != '') ext = decodeURIComponent(ext) +' ';
 			s1 = id + g;
 			s2 = anchor + f_s + mode +' z'+ zoom +'</a> '+ ext + connected;
@@ -1014,6 +1065,19 @@ function kiwi_fft_mode()
 	}
 }
 
+function kiwi_mapPinSymbol(fillColor, strokeColor) {
+   fillColor = fillColor || 'red';
+   strokeColor = strokeColor || 'white';
+   return {
+      path: 'M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z',
+      fillColor: fillColor,
+      fillOpacity: 1,
+      strokeColor: strokeColor,
+      strokeWeight: 1,
+      scale: 1,
+   };
+}
+
 
 ////////////////////////////////
 // control messages
@@ -1055,6 +1119,10 @@ function kiwi_msg(param, ws)
 
 		case "rx_chans":
 			rx_chans = parseInt(param[1]);
+			break;
+
+		case "wf_chans":
+			wf_chans = parseInt(param[1]);
 			break;
 
 		case "rx_chan":
@@ -1240,7 +1308,8 @@ function kiwi_serious_error(s)
 	console.log(s);
 }
 
-function kiwi_trace()
+function kiwi_trace(msg)
 {
+   if (msg) console.log('console.trace: '+ msg);
 	try { console.trace(); } catch(ex) {}		// no console.trace() on IE
 }

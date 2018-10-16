@@ -28,7 +28,7 @@ Boston, MA  02110-1301, USA.
 #include "jsmn.h"
 #include "cfg.h"
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
  #include "dx.h"
 #endif
 
@@ -131,7 +131,7 @@ void cfg_reload(bool called_from_main)
 		}
 	}
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
 	dx_reload();
 #endif
 	
@@ -1149,4 +1149,14 @@ void _cfg_save_json(cfg_t *cfg, char *json)
         _cfg_parse_json(cfg, true);
     #endif
     TMEAS(u4_t now = timer_ms(); printf("cfg_save_json DONE reparse %.3f/%.3f msec\n", TIME_DIFF_MS(now, split), TIME_DIFF_MS(now, start));)
+}
+
+void _cfg_update_json(cfg_t *cfg)
+{
+    if (cfg == NULL) return;
+
+    if ((cfg->flags & CFG_NO_UPDATE) && (cfg->flags & CFG_PARSE_VALID) == 0) {
+        printf("_cfg_update_json: cfg <%s> OUT-OF-DATE re-parsing\n", cfg->filename);
+        _cfg_parse_json(cfg, true);
+    }
 }

@@ -237,9 +237,9 @@ function tc_controls_setup()
 		);
 
 	var controls_html =
-		w3_divs('id-tc-controls w3-text-white', '',
-			w3_divs('', 'w3-medium w3-text-aqua', '<b>Time station timecode decoder</b>'),
-			w3_divs('w3-margin-T-8', 'w3-show-inline w3-margin-right',
+		w3_div('id-tc-controls w3-text-white',
+			w3_div('w3-medium w3-text-aqua', '<b>Time station timecode decoder</b>'),
+			w3_divs('w3-margin-T-8/w3-show-inline w3-margin-right',
 				w3_select('', '', '', 'tc_config.sig', tc_config.sig, tc_sig_s, 'tc_signal_menu_cb'),
 				w3_div('id-tc-status w3-show-inline-block'),
 				w3_div('id-tc-status2 w3-show-inline-block')
@@ -251,7 +251,7 @@ function tc_controls_setup()
 	
 	ext_panel_show(controls_html, data_html, null);
 	time_display_setup('tc');
-	tc_resize();
+	tc_environment_changed( {resize:1} );
 	
 	ext_set_controls_width_height(1024);
 	
@@ -278,12 +278,14 @@ function tc_controls_setup()
 	// receive the network-rate, post-decompression, real-mode samples
 	ext_register_audio_data_cb(tc_audio_data_cb);
 	
-	ext_send("SET gps_update");
-	tc.interval = setInterval(function() {ext_send("SET gps_update");}, 1000);
+	// FIXME: use a different call that isn't privileged and doesn't leak location
+	//ext_send("SET gps_update");
+	//tc.interval = setInterval(function() {ext_send("SET gps_update");}, 1000);
 }
 
-function tc_resize()
+function tc_environment_changed(changed)
 {
+   if (!changed.resize) return;
 	var el = w3_el('id-tc-data');
 	var left = (window.innerWidth - 1024 - time_display_width()) / 2;
 	el.style.left = px(left);

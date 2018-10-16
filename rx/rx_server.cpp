@@ -35,7 +35,7 @@ Boston, MA  02110-1301, USA.
 #include "net.h"
 #include "data_pump.h"
 
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
  #include "ext_int.h"
 #endif
 
@@ -50,17 +50,17 @@ Boston, MA  02110-1301, USA.
 
 conn_t conns[N_CONNS];
 
-rx_chan_t rx_channels[RX_CHANS];
+rx_chan_t rx_channels[MAX_RX_CHANS];
 
 // NB: must be in conn_t.type order
 rx_stream_t streams[] = {
 	{ AJAX_VERSION,		"VER" },
-	{ STREAM_ADMIN,		"admin",	&c2s_admin,		&c2s_admin_setup,		&c2s_admin_shutdown,	ADMIN_PRIORITY },
-#if RX_CHANS
-	{ STREAM_SOUND,		"SND",		&c2s_sound,		&c2s_sound_setup,		NULL,                   SND_PRIORITY },
-	{ STREAM_WATERFALL,	"W/F",		&c2s_waterfall,	&c2s_waterfall_setup,	NULL,                   WF_PRIORITY },
-	{ STREAM_MFG,		"mfg",		&c2s_mfg,		&c2s_mfg_setup,			NULL,                   ADMIN_PRIORITY },
-	{ STREAM_EXT,		"EXT",		&extint_c2s,	&extint_setup_c2s,		NULL,                   EXT_PRIORITY },
+	{ STREAM_ADMIN,		"admin",	&c2s_admin,		&c2s_admin_setup,		&c2s_admin_shutdown,	 ADMIN_PRIORITY },
+#ifndef CFG_GPS_ONLY
+	{ STREAM_SOUND,		"SND",		&c2s_sound,		&c2s_sound_setup,		&c2s_sound_shutdown,	 SND_PRIORITY },
+	{ STREAM_WATERFALL,	"W/F",		&c2s_waterfall,	&c2s_waterfall_setup,	&c2s_waterfall_shutdown, WF_PRIORITY },
+	{ STREAM_MFG,		"mfg",		&c2s_mfg,		&c2s_mfg_setup,			NULL,                    ADMIN_PRIORITY },
+	{ STREAM_EXT,		"EXT",		&extint_c2s,	&extint_setup_c2s,		NULL,                    EXT_PRIORITY },
 
 	// AJAX requests
 	{ AJAX_DISCOVERY,	"DIS" },
@@ -96,18 +96,40 @@ void rx_enable(int chan, rx_chan_action_e action)
 	data_pump_start_stop();
 }
 
-int rx_chan_free(int *idx)
+int rx_chan_free(bool isWF_conn, int *idx)
 {
 	int i, free_cnt = 0, free_idx = -1;
 	rx_chan_t *rx;
 
-	for (i = 0; i < RX_CHANS; i++) {
-		rx = &rx_channels[i];
-		if (!rx->busy) {
-			free_cnt++;
-			if (free_idx == -1) free_idx = i;
-		}
-	}
+    // When configuration has a limited number of channels with waterfalls
+    // allocate them to non-Kiwi UI users last.
+    // Note that we correctly detect the WF-only use of kiwirecorder
+    // (e.g. SNR-measuring applications)
+
+    if (!isWF_conn && fw_sel == FW_SEL_SDR_8RX_2WF) {
+        for (i = 2; i < rx_chans; i++) {
+            rx = &rx_channels[i];
+            if (!rx->busy) {
+                free_cnt++;
+                if (free_idx == -1) free_idx = i;
+            }
+        }
+        for (i = 0; i < 2; i++) {
+            rx = &rx_channels[i];
+            if (!rx->busy) {
+                free_cnt++;
+                if (free_idx == -1) free_idx = i;
+            }
+        }
+    } else {
+        for (i = 0; i < rx_chans; i++) {
+            rx = &rx_channels[i];
+            if (!rx->busy) {
+                free_cnt++;
+                if (free_idx == -1) free_idx = i;
+            }
+        }
+    }
 	
 	if (idx != NULL) *idx = free_idx;
 	return free_cnt;
@@ -117,13 +139,22 @@ void dump()
 {
 	int i;
 	
-	for (i=0; i < RX_CHANS; i++) {
+	lprintf("\n");
+	lprintf("dump --------\n");
+	for (i=0; i < rx_chans; i++) {
 		rx_chan_t *rx = &rx_channels[i];
 		lprintf("RX%d en%d busy%d conn%d-%p\n", i, rx->enabled, rx->busy,
 			rx->conn_snd? rx->conn_snd->self_idx : 9999, rx->conn_snd? rx->conn_snd : 0);
 	}
 
 	conn_t *cd;
+	int nconn = 0;
+	for (cd = conns, i=0; cd < &conns[N_CONNS]; cd++, i++) {
+		if (cd->valid) nconn++;
+	}
+	lprintf("\n");
+	lprintf("CONNS: used %d/%d\n", nconn, N_CONNS);
+
 	for (cd = conns, i=0; cd < &conns[N_CONNS]; cd++, i++) {
 		if (cd->valid) {
 			lprintf("CONN%02d-%p %s%s rx=%d auth/admin=%d/%d KA=%02d/60 KC=%05d mc=%9p magic=0x%x ip=%s:%d other=%s%d %s%s\n",
@@ -151,7 +182,7 @@ static void dump_conn()
 			cd->magic, cd->remote_ip, cd->remote_port, cd->other? "CONN-":"", cd->other? cd->other-conns:0, cd->stop_data? "STOP":"");
 	}
 	rx_chan_t *rc;
-	for (rc = rx_channels, i=0; rc < &rx_channels[RX_CHANS]; rc++, i++) {
+	for (rc = rx_channels, i=0; rc < &rx_channels[rx_chans]; rc++, i++) {
 		lprintf("dump_conn: RX_CHAN-%d en %d busy %d conn = %s%d %p\n",
 			i, rc->enabled, rc->busy, rc->conn_snd? "CONN-":"", rc->conn_snd? rc->conn_snd-conns:0, rc->conn_snd);
 	}
@@ -204,11 +235,11 @@ void rx_server_init()
 	sigemptyset(&act.sa_mask);
 	
 	#if 1
-	act.sa_handler = debug_dump_handler;
-	scall("SIGUSR1", sigaction(SIGUSR1, &act, NULL));
+	    act.sa_handler = debug_dump_handler;
+	    scall("SIGUSR1", sigaction(SIGUSR1, &act, NULL));
 	#else
-	act.sa_handler = cfg_reload_handler;
-	scall("SIGUSR1", sigaction(SIGUSR1, &act, NULL));
+	    act.sa_handler = cfg_reload_handler;
+	    scall("SIGUSR1", sigaction(SIGUSR1, &act, NULL));
 	#endif
 
 	update_vars_from_config();      // add any missing config vars
@@ -268,7 +299,7 @@ void rx_server_remove(conn_t *c)
 	if (c->arrived) rx_loguser(c, LOG_LEAVING);
 	webserver_connection_cleanup(c);
 	if (c->user) kiwi_free("user", c->user);
-	if (c->geo) free(c->geo);
+	free(c->geo);
 	if (c->pref_id) free(c->pref_id);
 	if (c->pref) free(c->pref);
 	
@@ -279,18 +310,26 @@ void rx_server_remove(conn_t *c)
 	TaskRemove(task);
 }
 
-int rx_server_conns(conn_count_e type)
+int rx_count_server_conns(conn_count_e type)    // EXTERNAL_ONLY, INCLUDE_INTERNAL, TDOA_USERS
 {
 	int users=0, any=0;
 	
 	conn_t *c = conns;
 	for (int i=0; i < N_CONNS; i++) {
-	    // don't count internal connections so e.g. WSPR autorun won't prevent updates
-		bool sound = (c->type == STREAM_SOUND && ((type == EXTERNAL_ONLY)? !c->internal_connection : 1));
-		if (c->valid && sound) users++;
-		if (c->valid && (sound || c->type == STREAM_WATERFALL)) any = 1;
+        // if type == EXTERNAL_ONLY don't count internal connections so e.g. WSPR autorun won't prevent updates
+        bool sound = (c->valid && c->type == STREAM_SOUND && ((type == EXTERNAL_ONLY)? !c->internal_connection : true));
+
+	    if (type == TDOA_USERS) {
+	        if (sound && c->user && kiwi_str_begins_with(c->user, "TDoA_service"))
+	            users++;
+	    } else {
+            if (sound) users++;
+            // will return 1 if there are no sound connections but at least one waterfall connection
+            if (sound || (c->valid && c->type == STREAM_WATERFALL)) any = 1;
+        }
 		c++;
 	}
+	
 	return (users? users : any);
 }
 
@@ -372,7 +411,9 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
         }
         
         if (mode == WS_MODE_CLOSE) {
-            //cprintf(c, "WS_MODE_CLOSE %s KA=%02d/60 KC=%05d\n", streams[c->type].uri, c->keep_alive, c->keepalive_count);
+            //cprintf(c, "WS_MODE_CLOSE %s KICK KA=%02d/60 KC=%05d\n", streams[c->type].uri, c->keep_alive, c->keepalive_count);
+            if (!c->internal_connection)
+                mg_websocket_write(mc, WS_OPCODE_CLOSE, "", 0);
             c->mc = NULL;
             c->kick = true;
             return NULL;
@@ -390,13 +431,26 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 	if (uri_ts[0] == '/') uri_ts++;
 	//printf("#### new connection: %s:%d %s\n", mc->remote_ip, mc->remote_port, uri_ts);
 	
+	bool isKiwi_UI = false, isNo_WF = false, isWF_conn = false;
 	u64_t tstamp;
 	char *uri_m = NULL;
-	if (sscanf(uri_ts, "%lld/%256ms", &tstamp, &uri_m) != 2) {
-		printf("bad URI_TS format\n");
-		free(uri_m);
-		return NULL;
-	}
+	if (sscanf(uri_ts, "kiwi/%lld/%256ms", &tstamp, &uri_m) == 2) {
+	    isKiwi_UI = true;
+	} else
+	if (sscanf(uri_ts, "no_wf/%lld/%256ms", &tstamp, &uri_m) == 2) {
+	    isKiwi_UI = true;
+	    isNo_WF = true;
+	} else {
+        if (sscanf(uri_ts, "%lld/%256ms", &tstamp, &uri_m) != 2) {
+            printf("bad URI_TS format\n");
+            free(uri_m);
+            return NULL;
+        }
+    }
+    
+    // specifically asked for waterfall-containing channel (e.g. kiwirecorder WF-only mode)
+    if (strstr(uri_m, "W/F"))
+        isWF_conn = true;
 	
 	for (i=0; streams[i].uri; i++) {
 		st = &streams[i];
@@ -413,7 +467,7 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
     free(uri_m);
 
 	// handle case of server initially starting disabled, but then being enabled later by admin
-#if RX_CHANS
+#ifndef CFG_GPS_ONLY
 	static bool init_snd_wf;
 	if (!init_snd_wf && !down) {
 		c2s_sound_init();
@@ -524,7 +578,7 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 		} else {
 			//printf("(too many network connections open for %s)\n", st->uri);
 			if (st->type != STREAM_WATERFALL && !internal)
-			    send_msg_mc(mc, SM_NO_DEBUG, "MSG too_busy=%d", RX_CHANS);
+			    send_msg_mc(mc, SM_NO_DEBUG, "MSG too_busy=%d", rx_chans);
 			return NULL;
 		}
 	}
@@ -538,23 +592,55 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 	if (snd_or_wf) {
 		int rx;
 		if (!cother) {
-			int rx_free = rx_chan_free(&rx);
+			rx_chan_free((isKiwi_UI || isWF_conn) && !isNo_WF, &rx);
+            //printf("### %s cother=%p isKiwi_UI=%d isNo_WF=%d isWF_conn=%d use_rx=%d\n",
+            //    st->uri, cother, isKiwi_UI, isNo_WF, isWF_conn, rx);
+
 			if (rx == -1) {
 				//printf("(too many rx channels open for %s)\n", st->uri);
-				if (st->type == STREAM_SOUND && !internal)
-				    send_msg_mc(mc, SM_NO_DEBUG, "MSG too_busy=%d", RX_CHANS);
-				mc->connection_param = NULL;
-				conn_init(c);
-				return NULL;
+                send_msg_mc(mc, SM_NO_DEBUG, "MSG too_busy=%d", rx_chans);
+                mc->connection_param = NULL;
+                conn_init(c);
+                return NULL;
 			}
+			
+			if (st->type == STREAM_WATERFALL && rx >= wf_chans) {
+				
+				// Kiwi UI handles no-WF condition differently -- don't send error
+				if (!isKiwi_UI) {
+				    //printf("(case 1: too many wf channels open for %s)\n", st->uri);
+				    send_msg_mc(mc, SM_NO_DEBUG, "MSG too_busy=%d", rx_chans);
+                    mc->connection_param = NULL;
+                    conn_init(c);
+                    return NULL;
+                }
+			}
+			
 			//printf("CONN-%d no other, new alloc rx%d\n", cn, rx);
 			rx_channels[rx].busy = true;
 		} else {
+            //printf("### %s cother=%p isKiwi_UI=%d isNo_WF=%d isWF_conn=%d\n",
+            //    st->uri, cother, isKiwi_UI, isNo_WF, isWF_conn);
+			if (st->type == STREAM_WATERFALL && cother->rx_channel >= wf_chans) {
+
+				// Kiwi UI handles no-WF condition differently -- don't send error
+				if (!isKiwi_UI) {
+                    //printf("(case 2: too many wf channels open for %s)\n", st->uri);
+                    mc->connection_param = NULL;
+                    conn_init(c);
+                    return NULL;
+                }
+			}
+			
 			rx = -1;
 			cother->other = c;
 		}
 		c->rx_channel = cother? cother->rx_channel : rx;
 		if (st->type == STREAM_SOUND) rx_channels[c->rx_channel].conn_snd = c;
+		
+		// e.g. for WF-only kiwirecorder connections (won't override above)
+		if (st->type == STREAM_WATERFALL && rx_channels[c->rx_channel].conn_snd == NULL)
+		    rx_channels[c->rx_channel].conn_snd = c;
 	}
   
 	c->mc = mc;
@@ -567,7 +653,7 @@ conn_t *rx_server_websocket(websocket_mode_e mode, struct mg_connection *mc)
 	assert(c->ui);
 	c->arrival = timer_sec();
 	clock_conn_init(c);
-	//printf("NEW channel %d\n", c->rx_channel);
+	//printf("NEW channel RX%d\n", c->rx_channel);
 	
 	if (st->f != NULL) {
 		c->task_func = st->f;

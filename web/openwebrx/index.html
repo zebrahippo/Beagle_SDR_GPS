@@ -32,12 +32,18 @@ This file is part of OpenWebRX.
 			var RX_PHOTO_LEFT_MARGIN = %[RX_PHOTO_LEFT_MARGIN];
 		</script>
 		
-		<link rel="stylesheet" type="text/css" href="pkgs/w3.css" />
-		<link rel="stylesheet" type="text/css" href="kiwi/w3_ext.css" />
 		<link rel="stylesheet" type="text/css" href="pkgs/font-awesome-4.6.3/css/font-awesome.min.css">
 		<link rel="stylesheet" type="text/css" href="pkgs/text-security/text-security-disc.min.css">
+		<link rel="stylesheet" type="text/css" href="pkgs/w3.css" />
+		<link rel="stylesheet" type="text/css" href="kiwi/w3_ext.css" />
 		<link rel="stylesheet" type="text/css" href="openwebrx.css" />
 		<link rel="stylesheet" type="text/css" href="kiwi/kiwi.css" />
+
+        <!-- see TDoA.js for a description of where these files are initially copied from -->
+        <link rel="stylesheet" type="text/css" href="pkgs/leaflet/leaflet.css" />
+        <link rel="stylesheet" type="text/css" href="pkgs/leaflet/mapbox-gl/mapbox-gl.49.css" />
+		<link rel="stylesheet" type="text/css" href="pkgs/leaflet/MarkerCluster/MarkerCluster.css" />
+		<link rel="stylesheet" type="text/css" href="pkgs/leaflet/MarkerCluster/MarkerCluster.Default.css" />
 
 		<script type="text/javascript">
 			/* must be before inclusion of any .js files below */
@@ -45,13 +51,16 @@ This file is part of OpenWebRX.
 		</script>
 		
 		<script src="config/config.js"></script>
+		<script src="pkgs/js/Ooura_FFT32.js"></script>
 		<script src="openwebrx.js"></script>
 		<script src="ima_adpcm.js"></script>
 		<script src="audio.js"></script>
 		<script src="kiwi/kiwi_util.js"></script>
 		<script src="kiwi/kiwi.js"></script>
+		<script src="kiwi/kiwi_ui.js"></script>
 		<script src="kiwi/w3_util.js"></script>
-		<script src="pkgs/SHA256.js"></script>
+		<script src="pkgs/js/SHA256.js"></script>
+		<script src="pkgs/js/graph.js"></script>
 		<script src="pkgs/xdLocalStorage/xd-utils.js"></script>
 		<script src="pkgs/xdLocalStorage/xdLocalStorage.js"></script>
 		<script src="extensions/ext.js"></script>
@@ -129,20 +138,25 @@ This file is part of OpenWebRX.
 				<!-- add scaled canvas here by javascript -->
 			</div>
 
-			<div id="id-scale-container">
-				<canvas id="id-band-canvas" width="0" height="0"></canvas>
-				<div id="id-dx-container"></div>
-					<canvas id="id-dx-canvas" width="0" height="0"></canvas>
-				<canvas id="id-scale-canvas" width="0" height="0"></canvas>
-					<div id="id-pb-adj-car" class="class-passband-adjust-car class-tooltip"></div>
-					<div id="id-pb-adj-lo" class="class-passband-adjust-cut class-tooltip"></div>
-					<div id="id-pb-adj-hi" class="class-passband-adjust-cut class-tooltip"></div>
-					<div id="id-pb-adj-cf" class="class-passband-adjust-cf class-tooltip"></div>
+			<div id="id-tuning-container">
+			    <div id="id-band-container">
+                    <canvas id="id-band-canvas" width="0" height="0"></canvas>
+                    <div id="id-dx-container"></div>
+                        <canvas id="id-dx-canvas" width="0" height="0"></canvas>
+			    </div>
+			    <div id="id-scale-container">
+                    <canvas id="id-scale-canvas" width="0" height="0"></canvas>
+                        <div id="id-pb-adj-car" class="class-passband-adjust-car class-tooltip"></div>
+                        <div id="id-pb-adj-lo" class="class-passband-adjust-cut class-tooltip"></div>
+                        <div id="id-pb-adj-hi" class="class-passband-adjust-cut class-tooltip"></div>
+                        <div id="id-pb-adj-cf" class="class-passband-adjust-cf class-tooltip"></div>
+			    </div>
 			</div>
 		</div>
 		
 		<div id="id-waterfall-container">
 			<div id="id-phantom-canvas"></div>
+			<div id="id-annotation-div"></div>
 			<!-- add scaled canvas here by javascript -->
 		</div>
 		

@@ -104,7 +104,7 @@ void GPSstat(STAT st, double d, int i, int j, int k, int m, double d2) {
         	    c->rssi = 0;
         	    c->sat = -1;
         		c->snr = c->wdog = c->ca_unlocked = c->hold = c->sub = c->sub_renew = 0;
-        		c->soln = c->novfl = c->az = c->el = c->frames = c->par_errs = 0;
+        		c->has_soln = c->novfl = c->az = c->el = c->frames = c->par_errs = 0;
         	} else {
                 c->rssi = (int) sqrt(d);
                 c->gain = j;
@@ -156,6 +156,10 @@ void GPSstat(STAT st, double d, int i, int j, int k, int m, double d2) {
             
             if (!gps.ttff) {
             	gps.ttff = (timer_ms() - gps.start)/1000;
+            	
+            	// run kiwisdr.com registration so kiwi.gps.json gets updated
+            	if (reg_kiwisdr_com_tid)
+            	    TaskWakeup(reg_kiwisdr_com_tid, TWF_CANCEL_DEADLINE, NULL);
             }
             break;
         case STAT_LON:
@@ -208,9 +212,9 @@ void GPSstat(STAT st, double d, int i, int j, int k, int m, double d2) {
             s->dbug_i3 = m;
             break;
         case STAT_SOLN:
-            gps.soln = i;
+            gps.soln_type = i;
             for (int ch = 0; ch < GPS_CHANS; ch++) {
-                gps.ch[ch].soln = j & (1 << ch);
+                gps.ch[ch].has_soln = j & (1 << ch);
             }
             break;
     }
@@ -241,7 +245,7 @@ void StatTask(void *param) {
 		
 		// only print solutions
 		if (print_stats & STATS_GPS_SOLN) {
-			static int fixes;
+			static u4_t fixes;
 			if (gps.fixes > fixes) {
 				fixes = gps.fixes;
 				if (gps.StatLat) printf("wikimapia.org/#lang=en&lat=%9.6f&lon=%9.6f&z=18&m=b\n",
