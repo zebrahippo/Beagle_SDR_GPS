@@ -1013,7 +1013,7 @@ function user_cb(obj)
 {
 	obj.forEach(function(obj) {
 		//console.log(obj);
-		var s1 = '', s2 = '';
+		var s1 = '', s2 = '', gg = '';//cc
 		var i = obj.i;
 		var name = obj.n;
 		var freq = obj.f;
@@ -1028,11 +1028,16 @@ function user_cb(obj)
 			var id = kiwi_strip_tags(decodeURIComponent(name), '');
 			if (id != '') id = '"'+ id + '" ';
 			var g = (geoloc == '(null)' || geoloc == '')? 'unknown location' : decodeURIComponent(geoloc);
+			gg = g;//cc
+			var gg1 = gg.split('::');//cc
+			g = gg1[0];
 			ip = ip.replace(/::ffff:/, '');		// remove IPv4-mapped IPv6 if any
+			if ((gg1.length >= 3)&&(ip != '')) {ip = gg1[2];}//cc
 			g = '('+ ip + g +') ';
 			var f = freq + cfg.freq_offset*1e3;
 			var f = (f/1000).toFixed((f > 100e6)? 1:2);
 			var f_s = f + ' kHz ';
+			if (gg1.length >= 2) {f_s = gg1[1];}//cc
 			var fo = (freq/1000).toFixed(2);
 			var anchor = '<a href="javascript:tune('+ fo +','+ sq(mode) +','+ zoom +');">';
 			if (ext != '') ext = decodeURIComponent(ext) +' ';
@@ -1040,6 +1045,7 @@ function user_cb(obj)
 			s2 = anchor + f_s + mode +' z'+ zoom +'</a> '+ ext + connected;
 		}
 		
+		if (gg == 'qwert123') {s1 = '';s2 = '';}//cc
 		//if (s1 != '') console.log('user'+ i +'='+ s1 + s2);
 		if (user_init) {
 		   // status display used by admin page
